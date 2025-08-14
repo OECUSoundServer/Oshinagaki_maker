@@ -13,14 +13,14 @@ const state = {
     bandInset: 0       // mm
   },
   // size: "large" | "small" | "two"（←2段組み）
-  // cols: 固定列数（0=自動）。two のときは無視して常に2列。
+  // cols: 固定列数（0=自動）。two でも有効（0=既定2列）
   sections: { music: { name: "新譜", size: "large", cols: 0, items: [] } },
   order: ["music"],
 
   note: "その他頒布物の詳細はコチラ→",
   qrUrl: "",
 
-  // ★ 追加: QR 見た目設定
+  // ★ QR 見た目設定
   qrStyle: {
     sizeMm: 32,
     padMm: 2,
@@ -36,7 +36,7 @@ const state = {
   itemBorder: { on: true, width: 0.3 },         // mm
   appearance: { priceStyle: "box", tagStyle: "outline" },
 
-  // largeMin / smallMin は min 幅の基準（小は大より大きくならない制御はCSS側で維持）
+  // largeMin / smallMin は min 幅の基準
   grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42, align: "start" },
 
   background: { mode: "color", color: "#ffffff", imageSrc: "", fit: "cover" },
@@ -80,7 +80,7 @@ function qs(sel){ return document.querySelector(sel); }
 function ce(tag, cls){ const n=document.createElement(tag); if(cls) n.className=cls; return n; }
 function v(id){ return g(id).value.trim(); }
 
-/* 単位変換（中央寄せ対応の列幅算出で使用） */
+/* 単位変換（列幅算出で使用） */
 let __mmPx = null;
 function mmToPx(mm){
   if(__mmPx == null){
@@ -196,18 +196,15 @@ function applyBackground(){
 }
 
 /* ========= QR スタイル適用 & 生成 ========= */
-// キャンバス側(#paper 内の #qr)に見た目を反映（CSS未改修でも動くよう inline でも設定）
 function applyQrStyle(){
   const t = el.paper;
   const q = state.qrStyle;
-  // CSSカスタムプロパティ（CSSで参照する場合）
   cssVar("--qr-size",   `${Math.max(10, q.sizeMm)}mm`, t);
   cssVar("--qr-pad",    `${Math.max(0, q.padMm)}mm`, t);
   cssVar("--qr-border-w", `${(q.borderOn ? Math.max(0, q.borderWidthMm) : 0)}mm`, t);
   cssVar("--qr-border-color", q.borderColor || "#000000", t);
   cssVar("--qr-radius", `${Math.max(0, q.radiusMm)}mm`, t);
 
-  // inline style（CSS未導入でも効く）
   const qr = g("qr");
   if(qr){
     qr.style.width = `${Math.max(10, q.sizeMm)}mm`;
@@ -222,7 +219,6 @@ function applyQrStyle(){
     qr.style.overflow = "hidden";
   }
 }
-// パディングを除いた内側の正味サイズ(px)を算出
 function qrInnerPx(){
   const qr = g("qr"); if(!qr) return 64;
   const cs = getComputedStyle(qr);
@@ -232,7 +228,6 @@ function qrInnerPx(){
   const h = Math.max(40, Math.floor(qr.clientHeight - padY));
   return Math.floor(Math.min(w, h));
 }
-// URLが設定されていれば現在のスタイルで再生成
 function remakeQRIfNeeded(){
   if(!state.qrUrl) return;
   const qr = g("qr"); if(!qr) return;
@@ -281,7 +276,6 @@ function renderSectionList(){
   el.sectionList.innerHTML = "";
   state.order.forEach(id=>{
     const s = state.sections[id];
-    // 後方互換: 既存セクションに cols が無ければ 0 を入れておく
     if(typeof s.cols !== "number") s.cols = 0;
 
     const li = document.createElement("li");
@@ -303,22 +297,20 @@ function renderSectionList(){
     modeBtn.addEventListener("click", ()=>{
       s.size = nextSize(s.size || "small");
       modeBtn.textContent = sizeLabel(s.size);
-      // 2段のときは列数入力は無効化（ビジュアル上は動作するが意味が無い）
-      colsInput.disabled = (s.size === "two");
+      // ★ 2段でも列数入力は有効のまま
       renderSections();
       applyAutoColWidth();
     });
 
-    // 列数（0=自動）
+    // 列数（0=自動 / 2段時は0なら既定2列）
     const colsInput = document.createElement("input");
     colsInput.type = "number";
     colsInput.className = "cols-input";
     colsInput.min = 0;
     colsInput.value = s.cols || 0;
-    colsInput.title = "列数（0=自動）";
+    colsInput.title = "列数（0=自動｜2段=0は既定2列）";
     colsInput.style.width = "4.2em";
     colsInput.style.marginLeft = "6px";
-    colsInput.disabled = (s.size === "two");
     colsInput.addEventListener("input", ()=>{
       const n = Math.max(0, parseInt(colsInput.value || "0", 10));
       s.cols = n;
@@ -446,7 +438,7 @@ function renderSections(){
 }
 
 /* 列幅の自動計算（セクションごと）
-   - size==="two" なら 2段固定（親幅を2分割）
+   - size==="two" なら cols=0は2、>0は指定列で等分
    - cols>0 なら 固定列。列幅 = min(等分幅, 最小幅) → 余白が残れば中央/右寄せが効く
    - cols=0 なら CSSのauto-fill/minmaxに任せる（--colwは未設定） */
 function applyAutoColWidth(){
@@ -456,27 +448,28 @@ function applyAutoColWidth(){
     if(!ul) return;
 
     const size = sec.size || "small";
-    const cols = (size === "two") ? 2 : (sec.cols|0);
+    const colsSetting = sec.cols|0;
 
-    // 2段組み
+    // ★ 2段：cols=0なら2列、>0なら指定列
     if(size === "two"){
+      const cols = colsSetting > 0 ? colsSetting : 2;
       ul.style.removeProperty("--colw");
-      ul.style.gridTemplateColumns = `repeat(2, minmax(0, 1fr))`;
+      ul.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
       return;
     }
 
-    // 自動列
-    if(!cols){
+    // 自動列（大/小）
+    if(!colsSetting){
       ul.style.removeProperty("--colw");
       ul.style.removeProperty("grid-template-columns");
       return;
     }
 
-    // 固定列：等分幅と最小幅の小さい方を採用
+    // 固定列（大/小）：等分幅と最小幅の小さい方を採用
     const st  = getComputedStyle(ul);
     const gap = parseFloat(st.gap) || 0;     // px
     const w   = ul.clientWidth;              // px
-    const exact = Math.max(1, (w - gap * (cols - 1)) / cols);
+    const exact = Math.max(1, (w - gap * (colsSetting - 1)) / colsSetting);
 
     const minVar = size === "large" ? "--card-large-min" : "--card-small-min";
     const minLen = getComputedStyle(document.documentElement).getPropertyValue(minVar);
@@ -484,7 +477,7 @@ function applyAutoColWidth(){
 
     const col = Math.max(60, Math.min(exact, minPx)); // 下限60pxは保険
     ul.style.setProperty("--colw", `${col}px`);
-    ul.style.gridTemplateColumns = `repeat(${cols}, minmax(var(--colw), var(--colw)))`;
+    ul.style.gridTemplateColumns = `repeat(${colsSetting}, minmax(var(--colw), var(--colw)))`;
   });
 }
 
@@ -617,7 +610,6 @@ on("btn-add-section","click", ()=>{
   const name = g("new-section-name").value.trim();
   if(!name) return;
   const idd = uid();
-  // デフォルトは：新譜/新刊/新作 → large、それ以外 small
   const defSize = /新譜|新刊|新作/.test(name) ? "large" : "small";
   state.sections[idd] = { name, size: defSize, cols: 0, items: [] };
   state.order.push(idd);
@@ -625,7 +617,7 @@ on("btn-add-section","click", ()=>{
   renderSectionList(); renderSections(); refreshSectionSelect();
 });
 
-// 余白やサイズ類（全体の最小幅はCSS変数に）
+// 余白やサイズ類
 on("section-gap","input", e=>{ state.grid.sectionGap = +e.target.value; applyGridVars(); });
 on("items-gap","input", e=>{ state.grid.itemsGap = +e.target.value; applyGridVars(); applyAutoColWidth(); });
 on("card-large-min","input", e=>{ state.grid.largeMin = +e.target.value; applyGridVars(); });
@@ -886,7 +878,7 @@ on("btn-export-png","click", async ()=>{
 /* ========= 初期化 ========= */
 function init() {
   applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
-  applyQrStyle(); // ★ 追加: 初期反映
+  applyQrStyle(); // 初期反映
   rerenderAll();
 
   const ro = new ResizeObserver(()=> { recomputeAutoScale(); applyAutoColWidth(); });
@@ -899,7 +891,7 @@ function init() {
     if(state.editing && confirm("このアイテムを削除しますか？")) deleteEditingItem();
   });
 
-  // ★ 追加: QR 関連のUIイベント（存在する場合のみ登録）
+  // QR 関連のUIイベント（存在する場合のみ登録）
   const qs = g("qr-size"); if(qs) qs.addEventListener("input", e=>{
     state.qrStyle.sizeMm = +e.target.value || 32; applyQrStyle(); remakeQRIfNeeded(); recomputeAutoScale();
   });
