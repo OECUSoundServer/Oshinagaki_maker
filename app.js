@@ -28,7 +28,7 @@ const state = {
 
   background: { mode: "color", color: "#ffffff", imageSrc: "", fit: "cover" },
 
-  editing: null
+  editing: null // {secId, itemId}
 };
 
 /* ========= 参照 ========= */
@@ -66,6 +66,29 @@ function g(id){ return document.getElementById(id); }
 function qs(sel){ return document.querySelector(sel); }
 function ce(tag, cls){ const n=document.createElement(tag); if(cls) n.className=cls; return n; }
 function v(id){ return g(id).value.trim(); }
+
+/* 単位変換（中央寄せ対応の列幅算出で使用） */
+let __mmPx = null;
+function mmToPx(mm){
+  if(__mmPx == null){
+    const d = document.createElement("div");
+    d.style.position = "absolute";
+    d.style.width = "1mm";
+    d.style.height = 0;
+    document.body.appendChild(d);
+    __mmPx = d.getBoundingClientRect().width;
+    d.remove();
+  }
+  return mm * __mmPx;
+}
+function cssLengthToPx(lenStr){
+  const s = String(lenStr || "").trim();
+  if(!s) return 0;
+  if(s.endsWith("mm")) return mmToPx(parseFloat(s));
+  if(s.endsWith("px")) return parseFloat(s);
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
 
 /* ========= 画像：圧縮読み込み（最大辺1600px, JPEG85%） ========= */
 async function fileToDataURL(file, maxSide = 1600, quality = 0.85){
@@ -126,6 +149,7 @@ function applyGridVars(){
   cssVar("--cols-small", String(Math.max(0, state.grid.colsSmall|0)));
   cssVar("--grid-justify", state.grid.align);
   recomputeAutoScale();
+  applyAutoColWidth();
 }
 function applyBandTune(){
   cssVar("--band-height", `${state.header.bandHeight}mm`);
@@ -148,7 +172,7 @@ function applyBackground(){
     cssVar("--paper-bg-size", "auto", p);
     cssVar("--paper-bg-repeat", "no-repeat", p);
   } else { // image
-    cssVar("--paper-bg-color", "#ffffff", p); // 下地は白
+    cssVar("--paper-bg-color", "#ffffff", p);
     cssVar("--paper-bg-image", imageSrc ? `url("${imageSrc}")` : "none", p);
     if(fit === "tile"){
       cssVar("--paper-bg-size", "auto", p);
@@ -231,8 +255,8 @@ function renderSectionList(){
 
 function renderSections(){
   el.sectionsRoot.innerHTML = "";
-  state.order.forEach(id=>{
-    const sec = state.sections[id];
+  state.order.forEach(secId=>{
+    const sec = state.sections[secId];
     const wrap = ce("section", "section");
     wrap.dataset.size = sec.size || (/新譜|新刊|新作/.test(sec.name) ? "large" : "small");
     wrap.dataset.cols = (wrap.dataset.size === "large" ? state.grid.colsLarge : state.grid.colsSmall) || 0;
@@ -244,64 +268,48 @@ function renderSections(){
       renderSectionList();
     });
 
-    const ul = ce("ul", "items"); ul.id = `items-${id}`;
+    const ul = ce("ul", "items"); ul.id = `items-${secId}`;
     wrap.appendChild(h2); wrap.appendChild(ul); el.sectionsRoot.appendChild(wrap);
 
     ul.innerHTML = "";
-    sec.items.forEach((it,idx)=>{
+    sec.items.forEach((it)=>{
+      // 各アイテムは必ず一意IDを持つ
+      if(!it.id) it.id = uid();
+
       const li = ce("li", "item");
+      li.dataset.itemId = it.id;
       if(it.layout === "right") li.classList.add("layout-right");
 
-      li.addEventListener("click", (e)=>{ e.stopPropagation(); startEditItem(id, idx); });
+      li.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        startEditItemById(secId, li.dataset.itemId);
+      });
 
       const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
       li.appendChild(img);
 
       /* --- バッジ：NEW（左上）＋ R18/R18G（右上で縦積み） --- */
-
-      // NEW：画像優先、なければテキスト
       if(it.badgeSrc){
         const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
       } else if(it.isNew){
         const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
       }
-
-      // 右上：積み上げ表示用の位置管理
       let rightTopMm = 2;
-      const pushRight = (node)=>{
-        node.style.top = `${rightTopMm}mm`;
-        node.style.right = `2mm`;
-        rightTopMm += 14; // 12mm + 間隔2mm
-      };
-
-      // R18（画像優先）
-      if(it.badgeR18Src){
-        const bi = ce("img", "badge-img-r18"); bi.src = it.badgeR18Src;
-        pushRight(bi); li.appendChild(bi);
-      } else if(it.isR18){
-        const b = ce("div", "badge-r18"); b.textContent = "R18";
-        pushRight(b); li.appendChild(b);
-      }
-
-      // R18G（画像優先）
-      if(it.badgeR18GSrc){
-        const bi = ce("img", "badge-img-r18g"); bi.src = it.badgeR18GSrc;
-        pushRight(bi); li.appendChild(bi);
-      } else if(it.isR18G){
-        const b = ce("div", "badge-r18g"); b.textContent = "R18G";
-        pushRight(b); li.appendChild(b);
-      }
-
+      const pushRight = (node)=>{ node.style.top = `${rightTopMm}mm`; node.style.right = `2mm`; rightTopMm += 14; };
+      if(it.badgeR18Src){ const bi = ce("img","badge-img-r18"); bi.src = it.badgeR18Src; pushRight(bi); li.appendChild(bi); }
+      else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
+      if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
+      else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
       /* --- /バッジ --- */
 
       const textBox = ce("div");
       if(it.layout === "right") li.appendChild(textBox);
 
       const caption = ce("div", "caption"); caption.textContent = it.title || "";
-      const desc = ce("div", "desc"); if(it.desc) desc.textContent = it.desc;
+      const desc    = ce("div", "desc");    if(it.desc) desc.textContent = it.desc;
 
       const meta = ce("div", "meta");
-      if(it.pages){ meta.appendChild(tagEl(`${it.pages}ページ`)); }
+      if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
       if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
       if(Array.isArray(it.customTags)){
         it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t)));
@@ -324,17 +332,51 @@ function renderSections(){
       ul.appendChild(li);
     });
 
+    // 並べ替え：DOMの順序から items を並び替える（ID基準）
     new Sortable(ul, {
       animation: 120,
-      onEnd: (ev)=>{
-        const arr = sec.items;
-        const [moved] = arr.splice(ev.oldIndex,1);
-        arr.splice(ev.newIndex,0,moved);
+      onEnd: ()=>{
+        const ids = Array.from(ul.children).map(ch => ch.dataset.itemId);
+        sec.items.sort((a,b)=> ids.indexOf(a.id) - ids.indexOf(b.id));
+        applyAutoColWidth();
+        recomputeAutoScale();
       }
     });
   });
 
   recomputeAutoScale();
+  applyAutoColWidth();
+}
+
+/* 列数>0：等分幅と最小幅の小さい方を列幅に → 余白が残れば中央/右寄せが効く */
+function applyAutoColWidth(){
+  document.querySelectorAll(".section").forEach(secEl=>{
+    const size = secEl.dataset.size; // "large" | "small"
+    const cols = (size === "large" ? (state.grid.colsLarge|0) : (state.grid.colsSmall|0));
+    const ul = secEl.querySelector(".items");
+    if(!ul) return;
+
+    if(!cols){
+      ul.style.removeProperty("--colw"); // 自動列モード
+      return;
+    }
+    const st  = getComputedStyle(ul);
+    const gap = parseFloat(st.gap) || 0;     // px
+    const w   = ul.clientWidth;              // px
+
+    // ぴったり等分幅
+    const exact = Math.max(1, (w - gap * (cols - 1)) / cols);
+
+    // CSS変数の最小幅（mm → px）
+    const minVar = size === "large" ? "--card-large-min" : "--card-small-min";
+    const minLen = getComputedStyle(document.documentElement).getPropertyValue(minVar);
+    const minPx  = cssLengthToPx(minLen);
+
+    // 列幅：コンテナが広い時は最小幅に固定（→左右余白ができ、justify-content が効く）
+    //       狭い時は等分幅で詰めて収める
+    const col = Math.max(60, Math.min(exact, minPx));
+    ul.style.setProperty("--colw", `${col}px`);
+  });
 }
 
 function tagEl(text){
@@ -378,8 +420,9 @@ function applyPaper() {
 function applyTypography(){
   const fam = state.typography.family;
   gf.href = gfMap[fam] || gfMap["Noto Sans JP"];
-  cssVar("--font", `"${fam}", system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN","Yu Gothic", sans-serif`);
-  cssVar("--base-pt", `${state.typography.basePt}pt`);
+  // キャンバス(.paper)にだけ適用（UIは固定）
+  cssVar("--font", `"${fam}", system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN","Yu Gothic", sans-serif`, el.paper);
+  cssVar("--base-pt", `${state.typography.basePt}pt`, el.paper);
   recomputeAutoScale();
 }
 
@@ -474,22 +517,22 @@ on("btn-add-section","click", ()=>{
 
 // 余白やサイズ類
 on("section-gap","input", e=>{ state.grid.sectionGap = +e.target.value; applyGridVars(); });
-on("items-gap","input", e=>{ state.grid.itemsGap = +e.target.value; applyGridVars(); });
+on("items-gap","input", e=>{ state.grid.itemsGap = +e.target.value; applyGridVars(); applyAutoColWidth(); });
 on("card-large-min","input", e=>{ state.grid.largeMin = +e.target.value; applyGridVars(); });
 on("card-small-min","input", e=>{ state.grid.smallMin = +e.target.value; applyGridVars(); });
 
 // 列数と横揃え
 on("cols-large", "input", e=>{
   state.grid.colsLarge = Math.max(0, parseInt(e.target.value||"0",10));
-  renderSections(); applyGridVars();
+  renderSections(); applyGridVars(); applyAutoColWidth();
 });
 on("cols-small", "input", e=>{
   state.grid.colsSmall = Math.max(0, parseInt(e.target.value||"0",10));
-  renderSections(); applyGridVars();
+  renderSections(); applyGridVars(); applyAutoColWidth();
 });
 on("grid-align", "change", e=>{
   state.grid.align = e.target.value; // start | center | end
-  applyGridVars();
+  applyGridVars(); renderSections();
 });
 
 // アイテム画像ソースUI
@@ -499,7 +542,7 @@ on("item-image-source","change", e=>{
   g("item-image-url-wrap").style.display  = (mode === "url")  ? "" : "none";
 });
 
-// アイテム追加
+// アイテム追加（※ 一意IDを付与）
 on("btn-add-item","click", async ()=>{
   const sec = el.secSelect.value;
   const title = v("item-title");
@@ -538,6 +581,7 @@ on("btn-add-item","click", async ()=>{
   ]);
 
   state.sections[sec].items.push({
+    id: uid(), // ★ 一意ID
     title, price, src, isNew, badgeSrc,
     isR18, badgeR18Src,
     isR18G, badgeR18GSrc,
@@ -549,10 +593,14 @@ on("btn-add-item","click", async ()=>{
   renderSections();
 });
 
-// アイテム編集（開始/反映/削除/キャンセル）
-function startEditItem(secId, index){
-  const it = state.sections[secId].items[index];
-  state.editing = {secId, index};
+/* ========= アイテム編集（ID基準） ========= */
+function startEditItemById(secId, itemId){
+  const arr = state.sections[secId].items;
+  const index = arr.findIndex(x=>x.id === itemId);
+  if(index < 0) return;
+  const it = arr[index];
+
+  state.editing = {secId, itemId};
   el.editIndicator.hidden = false;
   g("sec").value = secId;
 
@@ -580,23 +628,24 @@ function startEditItem(secId, index){
   el.btnCancelEdit.hidden = false;
   el.btnDelete.hidden = false;
 }
+
 function applyEditToItem(){
   if(!state.editing) return;
-  const {secId,index} = state.editing;
-  const it = state.sections[secId].items[index];
+  const {secId, itemId} = state.editing;
+  const arr = state.sections[secId].items;
+  const index = arr.findIndex(x=>x.id === itemId);
+  if(index < 0) return;
 
+  const it = arr[index];
   it.title = v("item-title");
   it.price = v("item-price");
-
   it.isNew  = g("item-isnew").checked;
   it.isR18  = g("item-isr18").checked;
   it.isR18G = g("item-isr18g").checked;
-
   it.desc   = v("item-desc");
   it.layout = g("item-layout").value;
   it.pages  = +v("item-pages") || 0;
   it.tracks = +v("item-tracks") || 0;
-
   it.customTags = v("item-custom-tags").split(/[、,]/).map(s=>s.trim()).filter(Boolean);
 
   const mode = g("item-image-source").value;
@@ -622,17 +671,23 @@ function applyEditToItem(){
     renderSections();
   });
 }
+
 function deleteEditingItem(){
   if(!state.editing) return;
-  const {secId,index} = state.editing;
-  state.sections[secId].items.splice(index,1);
+  const {secId, itemId} = state.editing;
+  const arr = state.sections[secId].items;
+  const index = arr.findIndex(x=>x.id === itemId);
+  if(index < 0) return;
+  arr.splice(index,1);
   clearItemForm();
   renderSections();
 }
+
 function cancelEdit(){
   state.editing = null;
   clearItemForm();
 }
+
 function clearItemForm(){
   el.editIndicator.hidden = true;
   g("item-title").value = "";
@@ -664,7 +719,7 @@ function clearItemForm(){
   state.editing = null;
 }
 
-// 枠線/価格/タグ 見た目
+/* ========= 枠線/価格/タグ ========= */
 on("item-border-on","change", e=>{
   state.itemBorder.on = e.target.checked;
   if(!state.itemBorder.on){ g("item-border-width").value = 0; state.itemBorder.width = 0; }
@@ -684,7 +739,7 @@ on("tag-style","change", e=>{
   state.appearance.tagStyle = e.target.value; applyAppearance(); renderSections();
 });
 
-// QR / 注記
+/* ========= QR / 注記 ========= */
 on("btn-make-qr","click", ()=>{
   const url = v("qr-url"); if(!url){ alert("URLを入力してください"); return; }
   state.qrUrl = url;
@@ -703,7 +758,7 @@ on("note","input", e=>{
   recomputeAutoScale();
 });
 
-// 印刷/PNG
+/* ========= 印刷/PNG ========= */
 on("btn-print","click", ()=> window.print());
 on("btn-export-png","click", async ()=>{
   const node = g("paper");
@@ -712,7 +767,6 @@ on("btn-export-png","click", async ()=>{
   node.classList.remove("show-safe","show-grid");
   node.classList.add("exporting");
 
-  // CSS背景をそのまま使う（backgroundColor:null）。影はCSSで無効化済み。
   const canvas = await html2canvas(node, {
     scale: 2,
     backgroundColor: null,
@@ -737,10 +791,10 @@ function init() {
   applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
   rerenderAll();
 
-  const ro = new ResizeObserver(()=> recomputeAutoScale());
+  const ro = new ResizeObserver(()=> { recomputeAutoScale(); applyAutoColWidth(); });
   ro.observe(el.content); ro.observe(el.contentInner);
+  window.addEventListener("resize", applyAutoColWidth);
 
-  // ← ここ重要：編集系ボタンのイベントを確実に登録
   on("btn-update-item", "click", applyEditToItem);
   on("btn-cancel-edit", "click", cancelEdit);
   on("btn-delete-item", "click", ()=>{

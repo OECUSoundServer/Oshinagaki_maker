@@ -30,24 +30,29 @@
 
   --cols-large: 0;       /* 0 = 自動 */
   --cols-small: 0;       /* 0 = 自動 */
-  --grid-justify: start; /* start | center | end（自動時のみ有効） */
+  --grid-justify: start; /* start | center | end */
 
   /* 背景（CSS変数で管理） */
   --paper-bg-color: #ffffff;
   --paper-bg-image: none;              /* url("...") or none */
   --paper-bg-size: cover;              /* cover | contain | auto */
   --paper-bg-repeat: no-repeat;        /* no-repeat | repeat */
-  --paper-bg-position: center center;  /* 常に中央基準 */
+  --paper-bg-position: center center;
+
+  /* 行数（line clamp） */
+  --caption-lines: 1;
+  --desc-lines: 2;
 }
 
 * { box-sizing: border-box; }
 html,body { height: 100%; }
 body {
-  margin: 0;
-  font-family: var(--font);
-  font-size: var(--base-pt);
-  color: #111;
-  background: #f3f3f5;
+    margin: 0;
+    /* ← サイドUIは固定のシステムフォント・固定サイズ */
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN","Yu Gothic", sans-serif;
+    font-size: 14px;
+    color: #111;
+    background: #f3f3f5;
 }
 
 /* アプリバー */
@@ -68,18 +73,17 @@ body {
 /* サイド/メイン */
 .main { display:grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; }
 
-/* サイドパネル：中だけ縦スクロール。横は出さない */
+/* サイドパネル：縦だけスクロール、横は非表示 */
 .panel{
   background:#fff;
   border:1px solid #e5e5ea;
   border-radius:12px;
   padding:12px;
-
   position: sticky;
   top: 64px;
   max-height: calc(100vh - 64px - 16px);
-  overflow-y: auto;     /* ← 縦だけ */
-  overflow-x: hidden;   /* ← 横は隠す */
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
@@ -97,14 +101,13 @@ body {
 .canvas-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .tips { font-size: 12px; opacity: .7; }
 
-/* 用紙：背景はCSS変数を使う（PNG時の色ズレ回避にも有効） */
+/* 用紙（背景はCSS変数で） */
 .paper {
   width: var(--paper-w);
   height: var(--paper-h);
   position: relative;
   overflow: hidden;
 
-  /* 背景指定 */
   background-color: var(--paper-bg-color);
   background-image: var(--paper-bg-image);
   background-size: var(--paper-bg-size);
@@ -114,10 +117,9 @@ body {
   box-shadow: 0 6px 24px rgba(0,0,0,.08);
 }
 .paper.landscape { width: var(--paper-h); height: var(--paper-w); }
-/* 書き出し時は影を消す（背景がくすむのを防ぐ） */
 .paper.exporting { box-shadow: none !important; }
 
-/* セーフエリア可視化 */
+/* セーフ/グリッド */
 .safe { position:absolute; inset: var(--margin); outline: 0.3mm dashed rgba(0,0,0,.3); pointer-events:none; display:none; }
 .paper.show-safe .safe { display:block; }
 .grid { position:absolute; inset:0; pointer-events:none; background-image:
@@ -127,14 +129,16 @@ body {
 }
 .paper.show-grid .grid { display:block; }
 
-/* 安全枠内コンテンツ（自動×手動スケール） */
+/* 安全枠内（自動×手動スケール） */
 .content{ position:absolute; inset: var(--margin); }
 .content-inner{
   transform-origin: top left;
   transform: scale(var(--content-scale));
   width: calc(100% / var(--content-scale));
   min-height: calc(100% / var(--content-scale));
+  font-size: var(--base-pt);
 }
+.paper { font-family: var(--font); }
 
 /* ヘッダー */
 .header { padding: var(--pad) var(--pad) 2mm; position: relative; }
@@ -147,7 +151,7 @@ body {
 .spaceno{ font-weight: 900; font-size: calc(var(--base-pt) * 1.64); text-align:center; }
 .title  { font-weight: 900; font-size: calc(var(--base-pt) * 1.82); text-align:right; }
 
-/* 帯（幅・太さ・位置調整） */
+/* 帯 */
 .band-wrap { position: relative; margin-top: 3mm; height: var(--band-height); }
 .band { position:absolute; left: var(--band-inset); right: var(--band-inset); height: 100%; background: var(--band); border-radius: 1mm; }
 .band-label {
@@ -160,27 +164,28 @@ body {
 .section:first-of-type{ padding-top: 4mm; }
 .section h2 { font-size: calc(var(--base-pt) * 1.45); margin: 0 0 3mm; border-bottom: .4mm solid #111; display:inline-block; padding-right: 2mm; }
 
-/* ===== アイテム・グリッド（列数/寄せ対応） ===== */
+/* ===== アイテムグリッド ===== */
 .section .items{
   list-style:none; margin:0; padding:0;
   display:grid; gap: var(--items-gap);
-  justify-content: var(--grid-justify); /* 自動時：start|center|end */
+  justify-content: var(--grid-justify); /* 左/中央/右（自動 & 固定列で共通扱い） */
+  align-content: start;
 }
-/* 自動（data-cols="0"） */
+
+/* 自動列（data-cols="0"）: 最小幅固定で折返し */
 .section[data-size="large"][data-cols="0"] .items{
   grid-template-columns: repeat(auto-fit, minmax(var(--card-large-min), var(--card-large-min)));
 }
 .section[data-size="small"][data-cols="0"] .items{
   grid-template-columns: repeat(auto-fit, minmax(var(--card-small-min), var(--card-small-min)));
 }
-/* 列数固定（>0） */
+
+/* 列数固定（>0）: 列幅は ul.items の --colw をJSで設定 */
 .section[data-size="large"]:not([data-cols="0"]) .items{
-  grid-template-columns: repeat(var(--cols-large), minmax(0, 1fr));
-  justify-content: stretch;
+  grid-template-columns: repeat(var(--cols-large), minmax(var(--colw, 0px), var(--colw, 1fr)));
 }
 .section[data-size="small"]:not([data-cols="0"]) .items{
-  grid-template-columns: repeat(var(--cols-small), minmax(0, 1fr));
-  justify-content: stretch;
+  grid-template-columns: repeat(var(--cols-small), minmax(var(--colw, 0px), var(--colw, 1fr)));
 }
 
 /* カード */
@@ -201,19 +206,75 @@ body {
 .item.layout-right{
   display:grid;
   grid-template-columns: 40mm 1fr;
-  gap: 3mm;
+  gap: 2.4mm;
   align-items:start;
 }
 .item.layout-right .thumb{ aspect-ratio:1/1; width: 40mm; }
 .item.layout-right .caption{ margin-top: 0; }
 
-/* タイトルは説明より大きく */
-.item .caption { margin-top: 1.5mm; font-weight:800; font-size: calc(var(--base-pt) * 1.25); }
+/* タイトル/説明（行数制限で高さ安定） */
+.item .caption{
+  margin-top: 1.4mm; font-weight:800; font-size: calc(var(--base-pt) * 1.25);
+  display:-webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--caption-lines);
+  overflow:hidden; line-height: 1.25;
+}
 .item .desc{
-  margin-top: 1mm; font-size: calc(var(--base-pt) * .95); line-height: 1.5; color: #333;
+  margin-top: 1mm; font-size: calc(var(--base-pt) * .95); line-height: 1.45; color: #333;
+  display:-webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--desc-lines);
+  overflow:hidden;
 }
 
-/* メタタグ（ページ/曲＋オリジナルタグ）— outline/filled/none */
+/* ★ 小サイズでは省略しない（line-clamp無効化） */
+.section[data-size="small"] .item .caption,
+.section[data-size="small"] .item .desc{
+  display: block;
+  -webkit-line-clamp: initial;
+  overflow: visible;
+  white-space: normal;
+}
+
+/* 小サイズはフォント少し小さめ（既存のままでもOK） */
+.section[data-size="small"] .item .caption{ font-size: calc(var(--base-pt) * 1.15); }
+.section[data-size="small"] .item .desc{    font-size: calc(var(--base-pt) * 0.90); }
+.section[data-size="small"] .item .meta{    font-size: calc(var(--base-pt) * 0.82); }
+.section[data-size="small"] .item .price{   font-size: calc(var(--base-pt) * 0.85); }
+
+/* 価格ラベルの重なり回避用に、カード下部に安全余白を確保 */
+.item{
+  /* 既存に追加：下だけ多めに */
+  padding: 2mm 2mm 10mm;
+}
+
+/* 価格の出し分け（既存） */
+.item .price {
+  position:absolute; right: 2mm; bottom: 2mm;
+  background:#fff; padding: .8mm 1.4mm;
+  border: .3mm solid #111; border-radius: .8mm; font-weight:900; font-size: calc(var(--base-pt) * 0.95);
+}
+
+/* ★ 価格スタイル別に安全余白を絞る（任意：見た目が詰まってほしい場合） */
+:root[style*="--price-style: text"] .item{  padding-bottom: 6mm; }
+:root[style*="--price-style: none"] .item{  padding-bottom: 2mm; }
+
+/* 右レイアウトでも重ならないよう余白維持（既存と併用） */
+.item.layout-right{
+  display:grid;
+  grid-template-columns: 40mm 1fr;
+  gap: 2.4mm;
+  align-items:start;
+}
+
+/* 小サイズは少し小さめ＆行数控えめ */
+.section[data-size="small"]{
+  --caption-lines: 1;
+  --desc-lines: 2;
+}
+.section[data-size="small"] .item .caption{ font-size: calc(var(--base-pt) * 1.15); }
+.section[data-size="small"] .item .desc{    font-size: calc(var(--base-pt) * 0.90); }
+.section[data-size="small"] .item .meta{    font-size: calc(var(--base-pt) * 0.82); }
+.section[data-size="small"] .item .price{   font-size: calc(var(--base-pt) * 0.85); }
+
+/* メタタグ */
 .item .meta{ margin-top: .6mm; font-size: calc(var(--base-pt) * .88); color: #555; display:flex; gap: 3mm; flex-wrap:wrap; }
 .item .meta .tag{
   border: .25mm solid #bbb; border-radius: .9mm; padding: .4mm 1.4mm; white-space: nowrap; background: transparent;
