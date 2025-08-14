@@ -257,23 +257,42 @@ function renderSections(){
       const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
       li.appendChild(img);
 
-      // NEW バッジ
+      /* --- バッジ：NEW（左上）＋ R18/R18G（右上で縦積み） --- */
+
+      // NEW：画像優先、なければテキスト
       if(it.badgeSrc){
         const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
       } else if(it.isNew){
         const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
       }
-      // R18 / R18G バッジ（画像優先）
+
+      // 右上：積み上げ表示用の位置管理
+      let rightTopMm = 2;
+      const pushRight = (node)=>{
+        node.style.top = `${rightTopMm}mm`;
+        node.style.right = `2mm`;
+        rightTopMm += 14; // 12mm + 間隔2mm
+      };
+
+      // R18（画像優先）
       if(it.badgeR18Src){
-        const bi = ce("img", "badge-img-r18"); bi.src = it.badgeR18Src; li.appendChild(bi);
+        const bi = ce("img", "badge-img-r18"); bi.src = it.badgeR18Src;
+        pushRight(bi); li.appendChild(bi);
       } else if(it.isR18){
-        const b = ce("div", "badge-r18"); b.textContent = "R18"; li.appendChild(b);
+        const b = ce("div", "badge-r18"); b.textContent = "R18";
+        pushRight(b); li.appendChild(b);
       }
+
+      // R18G（画像優先）
       if(it.badgeR18GSrc){
-        const bi = ce("img", "badge-img-r18g"); bi.src = it.badgeR18GSrc; li.appendChild(bi);
+        const bi = ce("img", "badge-img-r18g"); bi.src = it.badgeR18GSrc;
+        pushRight(bi); li.appendChild(bi);
       } else if(it.isR18G){
-        const b = ce("div", "badge-r18g"); b.textContent = "R18G"; li.appendChild(b);
+        const b = ce("div", "badge-r18g"); b.textContent = "R18G";
+        pushRight(b); li.appendChild(b);
       }
+
+      /* --- /バッジ --- */
 
       const textBox = ce("div");
       if(it.layout === "right") li.appendChild(textBox);
@@ -720,6 +739,13 @@ function init() {
 
   const ro = new ResizeObserver(()=> recomputeAutoScale());
   ro.observe(el.content); ro.observe(el.contentInner);
+
+  // ← ここ重要：編集系ボタンのイベントを確実に登録
+  on("btn-update-item", "click", applyEditToItem);
+  on("btn-cancel-edit", "click", cancelEdit);
+  on("btn-delete-item", "click", ()=>{
+    if(state.editing && confirm("このアイテムを削除しますか？")) deleteEditingItem();
+  });
 
   el.paper.classList.add("show-safe");
 }
