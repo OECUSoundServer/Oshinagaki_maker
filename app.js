@@ -12,15 +12,20 @@ const state = {
     bandHeight: 6,     // mm
     bandInset: 0       // mm
   },
-  // size: "large" | "small" | "two"（←2段組み）
-  // cols: 固定列数（0=自動）。two でも有効（0=既定2列）
-  sections: { music: { name: "新譜", size: "large", cols: 0, items: [] } },
+
+  // size: "large" | "small"
+  // cols: 固定列数（0=自動）
+  // side: "left" | "right"（ページ2カラム時の配置先）
+  sections: { music: { name: "新譜", size: "large", cols: 0, side: "left", items: [] } },
   order: ["music"],
+
+  // ページ全体のカラム（左右分割）
+  pageCols: { count: 1, gapMm: 6 }, // count=1 or 2
 
   note: "その他頒布物の詳細はコチラ→",
   qrUrl: "",
 
-  // ★ QR 見た目設定
+  // QR 見た目設定
   qrStyle: {
     sizeMm: 32,
     padMm: 2,
@@ -68,7 +73,7 @@ const sizeMap = {
 };
 const gfMap = {
   "Noto Sans JP": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap",
-  "M PLUS 1p": "https://fonts.googleapis.com/css2?family=M+PLUS+1p&wght@400;700;900&display=swap",
+  "M PLUS 1p": "https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700;900&display=swap",
   "Kosugi Maru": "https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap",
   "Shippori Mincho": "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&display=swap"
 };
@@ -195,6 +200,34 @@ function applyBackground(){
   }
 }
 
+/* ========= ページ2カラム適用 ========= */
+function applyPageCols(){
+  const c = state.pageCols.count|0;
+  const gap = Math.max(0, state.pageCols.gapMm);
+  // CSS変数（紙側だけ）
+  cssVar("--page-col-gap", `${gap}mm`, el.paper);
+
+  // sectionsRoot直下のレイアウトを更新（inlineで安全に）
+  const root = el.sectionsRoot;
+  root.innerHTML = ""; // ラッパを作り直すため一旦クリア（renderSectionsが再構築）
+
+  // ここでは見た目の基本だけ用意。実際のセクションDOMは renderSections 内で左右に流し込む
+  if(c === 2){
+    const wrap = ce("div","page-cols-wrap");
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "1fr 1fr";
+    wrap.style.gap = `var(--page-col-gap, ${gap}mm)`;
+
+    const left = ce("div","page-col-left");
+    const right = ce("div","page-col-right");
+    wrap.appendChild(left);
+    wrap.appendChild(right);
+    root.appendChild(wrap);
+  }else{
+    // 1列: 何も置かず、renderSections で直接 root に入れる
+  }
+}
+
 /* ========= QR スタイル適用 & 生成 ========= */
 function applyQrStyle(){
   const t = el.paper;
@@ -265,18 +298,12 @@ function renderHeader(){
   recomputeAutoScale();
 }
 
-function sizeLabel(sz){
-  return sz === "large" ? "大" : sz === "small" ? "小" : "2段";
-}
-function nextSize(sz){
-  return sz === "large" ? "small" : sz === "small" ? "two" : "large";
-}
-
 function renderSectionList(){
   el.sectionList.innerHTML = "";
   state.order.forEach(id=>{
     const s = state.sections[id];
     if(typeof s.cols !== "number") s.cols = 0;
+    if(!s.side) s.side = "left";
 
     const li = document.createElement("li");
 
@@ -290,30 +317,40 @@ function renderSectionList(){
       renderSections(); refreshSectionSelect();
     });
 
-    // モード（大/小/2段）サイクル
+    // 大/小トグル
     const modeBtn = document.createElement("button");
-    modeBtn.textContent = sizeLabel(s.size || "small");
+    modeBtn.textContent = (s.size==="large" ? "大" : "小");
     modeBtn.style.minWidth = "3.2em";
     modeBtn.addEventListener("click", ()=>{
-      s.size = nextSize(s.size || "small");
-      modeBtn.textContent = sizeLabel(s.size);
-      // ★ 2段でも列数入力は有効のまま
+      s.size = (s.size==="large" ? "small" : "large");
+      modeBtn.textContent = (s.size==="large" ? "大" : "小");
       renderSections();
       applyAutoColWidth();
     });
 
-    // 列数（0=自動 / 2段時は0なら既定2列）
+    // 列数（0=自動）
     const colsInput = document.createElement("input");
     colsInput.type = "number";
     colsInput.className = "cols-input";
     colsInput.min = 0;
     colsInput.value = s.cols || 0;
-    colsInput.title = "列数（0=自動｜2段=0は既定2列）";
+    colsInput.title = "列数（0=自動）";
     colsInput.style.width = "4.2em";
     colsInput.style.marginLeft = "6px";
     colsInput.addEventListener("input", ()=>{
       const n = Math.max(0, parseInt(colsInput.value || "0", 10));
       s.cols = n;
+      renderSections();
+      applyAutoColWidth();
+    });
+
+    // 置き場所（左/右）
+    const sideSel = document.createElement("select");
+    sideSel.innerHTML = `<option value="left">左</option><option value="right">右</option>`;
+    sideSel.value = s.side || "left";
+    sideSel.style.marginLeft = "6px";
+    sideSel.addEventListener("change", ()=>{
+      s.side = sideSel.value;
       renderSections();
       applyAutoColWidth();
     });
@@ -331,6 +368,7 @@ function renderSectionList(){
     li.appendChild(name);
     li.appendChild(modeBtn);
     li.appendChild(colsInput);
+    li.appendChild(sideSel);
     li.appendChild(del);
     el.sectionList.appendChild(li);
   });
@@ -346,99 +384,128 @@ function renderSectionList(){
 }
 
 function renderSections(){
-  el.sectionsRoot.innerHTML = "";
-  state.order.forEach(secId=>{
-    const sec = state.sections[secId];
-    if(typeof sec.cols !== "number") sec.cols = 0;
+  // ページ2カラムのラッパをセットアップ
+  applyPageCols();
 
-    const wrap = ce("section", "section");
-    wrap.dataset.size = sec.size || "small"; // "large" | "small" | "two"
-    wrap.dataset.cols = sec.cols || 0;
+  // 挿入先を取得（1列 or 2列）
+  const count = state.pageCols.count|0;
+  const root = el.sectionsRoot;
+  const leftHost  = (count===2) ? root.querySelector(".page-col-left")  : root;
+  const rightHost = (count===2) ? root.querySelector(".page-col-right") : null;
 
-    const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
-    h2.addEventListener("input", ()=>{
-      sec.name = h2.textContent;
-      renderSectionList();
-    });
+  if(count !== 2){
+    root.innerHTML = ""; // 1列のときは直接ルートに積むのでリセット
+  }else{
+    // 2列の場合、left/rightホストは applyPageCols 内で生成済み
+    leftHost.innerHTML = "";
+    rightHost.innerHTML = "";
+  }
 
-    const ul = ce("ul", "items"); ul.id = `items-${secId}`;
-    wrap.appendChild(h2); wrap.appendChild(ul); el.sectionsRoot.appendChild(wrap);
+  // order を left/right にフィルタして順に描画
+  const toRender = (host, side) => {
+    state.order.forEach(secId=>{
+      const sec = state.sections[secId];
+      if((count===2) && (sec.side || "left") !== side) return;
 
-    ul.innerHTML = "";
-    sec.items.forEach((it)=>{
-      if(!it.id) it.id = uid();
+      if(typeof sec.cols !== "number") sec.cols = 0;
+      if(!sec.side) sec.side = "left";
 
-      const li = ce("li", "item");
-      li.dataset.itemId = it.id;
-      if(it.layout === "right") li.classList.add("layout-right");
+      const wrap = ce("section", "section");
+      wrap.dataset.size = sec.size || "small"; // "large" | "small"
+      wrap.dataset.cols = sec.cols || 0;
 
-      li.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        startEditItemById(secId, li.dataset.itemId);
+      const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
+      h2.addEventListener("input", ()=>{
+        sec.name = h2.textContent;
+        renderSectionList();
       });
 
-      const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
-      li.appendChild(img);
+      const ul = ce("ul", "items"); ul.id = `items-${secId}`;
+      wrap.appendChild(h2); wrap.appendChild(ul); host.appendChild(wrap);
 
-      // NEW / R18 / R18G バッジ
-      if(it.badgeSrc){
-        const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
-      } else if(it.isNew){
-        const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
-      }
-      let rightTopMm = 2;
-      const pushRight = (node)=>{ node.style.top = `${rightTopMm}mm`; node.style.right = `2mm`; rightTopMm += 14; };
-      if(it.badgeR18Src){ const bi = ce("img","badge-img-r18"); bi.src = it.badgeR18Src; pushRight(bi); li.appendChild(bi); }
-      else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
-      if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
-      else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
+      ul.innerHTML = "";
+      sec.items.forEach((it)=>{
+        if(!it.id) it.id = uid();
 
-      const textBox = ce("div");
-      if(it.layout === "right") li.appendChild(textBox);
+        const li = ce("li", "item");
+        li.dataset.itemId = it.id;
+        if(it.layout === "right") li.classList.add("layout-right");
 
-      const caption = ce("div", "caption"); caption.textContent = it.title || "";
-      const desc    = ce("div", "desc");    if(it.desc) desc.textContent = it.desc;
+        li.addEventListener("click", (e)=>{
+          e.stopPropagation();
+          startEditItemById(secId, li.dataset.itemId);
+        });
 
-      const meta = ce("div", "meta");
-      if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
-      if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
-      if(Array.isArray(it.customTags)){ it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t))); }
+        const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
+        li.appendChild(img);
 
-      if(it.layout === "right"){
-        textBox.appendChild(caption);
-        if(it.desc) textBox.appendChild(desc);
-        if(meta.childElementCount) textBox.appendChild(meta);
-      }else{
-        li.appendChild(caption);
-        if(it.desc) li.appendChild(desc);
-        if(meta.childElementCount) li.appendChild(meta);
-      }
+        // NEW / R18 / R18G バッジ
+        if(it.badgeSrc){
+          const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
+        } else if(it.isNew){
+          const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
+        }
+        let rightTopMm = 2;
+        const pushRight = (node)=>{ node.style.top = `${rightTopMm}mm`; node.style.right = `2mm`; rightTopMm += 14; };
+        if(it.badgeR18Src){ const bi = ce("img","badge-img-r18"); bi.src = it.badgeR18Src; pushRight(bi); li.appendChild(bi); }
+        else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
+        if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
+        else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
 
-      if (it.price && state.appearance.priceStyle!=="none") {
-        const price = ce("div", "price"); price.textContent = it.price; li.appendChild(price);
-      }
+        const textBox = ce("div");
+        if(it.layout === "right") li.appendChild(textBox);
 
-      ul.appendChild(li);
+        const caption = ce("div", "caption"); caption.textContent = it.title || "";
+        const desc    = ce("div", "desc");    if(it.desc) desc.textContent = it.desc;
+
+        const meta = ce("div", "meta");
+        if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
+        if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
+        if(Array.isArray(it.customTags)){ it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t))); }
+
+        if(it.layout === "right"){
+          textBox.appendChild(caption);
+          if(it.desc) textBox.appendChild(desc);
+          if(meta.childElementCount) textBox.appendChild(meta);
+        }else{
+          li.appendChild(caption);
+          if(it.desc) li.appendChild(desc);
+          if(meta.childElementCount) li.appendChild(meta);
+        }
+
+        if (it.price && state.appearance.priceStyle!=="none") {
+          const price = ce("div", "price"); price.textContent = it.price; li.appendChild(price);
+        }
+
+        ul.appendChild(li);
+      });
+
+      // 並べ替え：DOMの順序から items を並び替える（ID基準）
+      new Sortable(ul, {
+        animation: 120,
+        onEnd: ()=>{
+          const ids = Array.from(ul.children).map(ch => ch.dataset.itemId);
+          sec.items.sort((a,b)=> ids.indexOf(a.id) - ids.indexOf(b.id));
+          applyAutoColWidth();
+          recomputeAutoScale();
+        }
+      });
     });
+  };
 
-    // 並べ替え：DOMの順序から items を並び替える（ID基準）
-    new Sortable(ul, {
-      animation: 120,
-      onEnd: ()=>{
-        const ids = Array.from(ul.children).map(ch => ch.dataset.itemId);
-        sec.items.sort((a,b)=> ids.indexOf(a.id) - ids.indexOf(b.id));
-        applyAutoColWidth();
-        recomputeAutoScale();
-      }
-    });
-  });
+  if(count===2){
+    toRender(leftHost, "left");
+    toRender(rightHost, "right");
+  }else{
+    // 1列は side 無視で order のまま
+    toRender(root, "left");
+  }
 
   recomputeAutoScale();
   applyAutoColWidth();
 }
 
 /* 列幅の自動計算（セクションごと）
-   - size==="two" なら cols=0は2、>0は指定列で等分
    - cols>0 なら 固定列。列幅 = min(等分幅, 最小幅) → 余白が残れば中央/右寄せが効く
    - cols=0 なら CSSのauto-fill/minmaxに任せる（--colwは未設定） */
 function applyAutoColWidth(){
@@ -450,15 +517,7 @@ function applyAutoColWidth(){
     const size = sec.size || "small";
     const colsSetting = sec.cols|0;
 
-    // ★ 2段：cols=0なら2列、>0なら指定列
-    if(size === "two"){
-      const cols = colsSetting > 0 ? colsSetting : 2;
-      ul.style.removeProperty("--colw");
-      ul.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-      return;
-    }
-
-    // 自動列（大/小）
+    // 自動列
     if(!colsSetting){
       ul.style.removeProperty("--colw");
       ul.style.removeProperty("grid-template-columns");
@@ -605,13 +664,14 @@ on("band-inset","input", e=>{ state.header.bandInset = +e.target.value; applyBan
   });
 });
 
-// セクション管理（追加）
+// セクション追加
 on("btn-add-section","click", ()=>{
   const name = g("new-section-name").value.trim();
   if(!name) return;
   const idd = uid();
   const defSize = /新譜|新刊|新作/.test(name) ? "large" : "small";
-  state.sections[idd] = { name, size: defSize, cols: 0, items: [] };
+  // 新規は左に入れておく（2カラム時にわかりやすい）
+  state.sections[idd] = { name, size: defSize, cols: 0, side: "left", items: [] };
   state.order.push(idd);
   g("new-section-name").value = "";
   renderSectionList(); renderSections(); refreshSectionSelect();
@@ -627,6 +687,18 @@ on("card-small-min","input", e=>{ state.grid.smallMin = +e.target.value; applyGr
 on("grid-align","change", e=>{
   state.grid.align = e.target.value; // start | center | end
   applyGridVars(); renderSections();
+});
+
+// ページカラム（存在すれば登録）
+const _pc = g("page-cols"); if(_pc) _pc.addEventListener("change", e=>{
+  state.pageCols.count = Math.max(1, Math.min(2, parseInt(e.target.value||"1",10)));
+  renderSections();
+  applyAutoColWidth();
+});
+const _pcg = g("page-col-gap"); if(_pcg) _pcg.addEventListener("input", e=>{
+  state.pageCols.gapMm = Math.max(0, +e.target.value || 0);
+  renderSections();
+  applyAutoColWidth();
 });
 
 // アイテム画像ソースUI
@@ -834,7 +906,6 @@ on("tag-style","change", e=>{
 });
 
 /* ========= QR / 注記 ========= */
-// 生成ボタン：URLを反映し、現在の見た目で生成
 on("btn-make-qr","click", ()=>{
   const url = v("qr-url"); if(!url){ alert("URLを入力してください"); return; }
   state.qrUrl = url;
@@ -878,7 +949,7 @@ on("btn-export-png","click", async ()=>{
 /* ========= 初期化 ========= */
 function init() {
   applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
-  applyQrStyle(); // 初期反映
+  applyQrStyle();
   rerenderAll();
 
   const ro = new ResizeObserver(()=> { recomputeAutoScale(); applyAutoColWidth(); });
@@ -889,26 +960,6 @@ function init() {
   on("btn-cancel-edit", "click", cancelEdit);
   on("btn-delete-item", "click", ()=>{
     if(state.editing && confirm("このアイテムを削除しますか？")) deleteEditingItem();
-  });
-
-  // QR 関連のUIイベント（存在する場合のみ登録）
-  const qs = g("qr-size"); if(qs) qs.addEventListener("input", e=>{
-    state.qrStyle.sizeMm = +e.target.value || 32; applyQrStyle(); remakeQRIfNeeded(); recomputeAutoScale();
-  });
-  const qp = g("qr-padding"); if(qp) qp.addEventListener("input", e=>{
-    state.qrStyle.padMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded(); recomputeAutoScale();
-  });
-  const qbo = g("qr-border-on"); if(qbo) qbo.addEventListener("change", e=>{
-    state.qrStyle.borderOn = e.target.checked; applyQrStyle(); remakeQRIfNeeded();
-  });
-  const qbw = g("qr-border-width"); if(qbw) qbw.addEventListener("input", e=>{
-    state.qrStyle.borderWidthMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded();
-  });
-  const qbc = g("qr-border-color"); if(qbc) qbc.addEventListener("input", e=>{
-    state.qrStyle.borderColor = e.target.value || "#000000"; applyQrStyle(); remakeQRIfNeeded();
-  });
-  const qbr = g("qr-border-radius"); if(qbr) qbr.addEventListener("input", e=>{
-    state.qrStyle.radiusMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded();
   });
 
   el.paper.classList.add("show-safe");

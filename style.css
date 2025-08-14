@@ -348,3 +348,23 @@ body {
   .appbar, .panel, .tips { display:none !important; }
   .paper { box-shadow:none; margin:0; }
 }
+
+/* 2カラムのラッパ（JSでも設定しますが保険として） */
+.paper .page-cols-wrap{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--page-col-gap, 6mm);
+}
+
+/* 各セクションのカードグリッド：中央寄せなど */
+.section .items{
+  display: grid;
+  gap: var(--items-gap, 4mm);
+  justify-content: var(--grid-justify, start);
+}
+
+/* 固定列（列数>0）のときは決め打ち幅でリピート */
+.section[data-cols]:not([data-cols="0"]) .items{
+  grid-template-columns: repeat(auto-fill, minmax(var(--colw, 80px), var(--colw, 80px)));
+  justify-content: var(--grid-justify, start);
+}

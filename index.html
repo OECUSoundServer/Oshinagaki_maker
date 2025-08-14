@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>お品書きメーカー（テスト版）</title>
+  <title>お品書きメーカー（β版）</title>
 
-  <!-- Google Fonts -->
-  <link id="gf" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" />
+  <!-- Google Fonts（JSで差し替え） -->
+  <link id="gf" rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" />
+
   <link rel="stylesheet" href="style.css" />
 
   <!-- 依存CDN（順序重要：ライブラリ → app.js） -->
@@ -24,6 +26,7 @@
   </header>
 
   <main class="main">
+    <!-- 左の設定パネル -->
     <aside class="panel">
       <section>
         <h3>用紙設定</h3>
@@ -43,6 +46,17 @@
         <label>余白(mm)
           <input id="paper-margin" type="number" min="0" step="1" value="10" />
         </label>
+        <div class="row-inline">
+          <label style="flex:1">ページカラム
+            <select id="page-cols">
+              <option value="1" selected>1列</option>
+              <option value="2">2列（左右）</option>
+            </select>
+          </label>
+          <label style="flex:1">左右間隔(mm)
+            <input id="page-col-gap" type="number" min="0" step="1" value="6" />
+          </label>
+        </div>
         <label class="chk"><input id="safe-area" type="checkbox" checked /> セーフエリア表示</label>
         <label class="chk"><input id="grid" type="checkbox" /> 5mmグリッド</label>
       </section>
@@ -63,12 +77,27 @@
       </section>
 
       <section>
+        <h3>レイアウト調整</h3>
+        <label>手動スケール（%）
+          <input id="content-scale" type="range" min="80" max="120" step="1" value="100" />
+        </label>
+        <label>アイテム横揃え
+          <select id="grid-align">
+            <option value="start" selected>左寄せ</option>
+            <option value="center">中央寄せ</option>
+            <option value="end">右寄せ</option>
+          </select>
+        </label>
+        <small class="tips">※ 自動スケールで安全枠に収め、手動スケールで微調整できます。</small>
+      </section>
+
+      <section>
         <h3>背景</h3>
-        <label>背景の種類
+        <label>背景モード
           <select id="bg-mode">
-            <option value="none">なし（透明/白）</option>
-            <option value="color" selected>単色</option>
+            <option value="color" selected>色</option>
             <option value="image">画像</option>
+            <option value="none">なし（白）</option>
           </select>
         </label>
 
@@ -86,28 +115,24 @@
             </select>
           </label>
           <div id="bg-image-file-row">
-            <label>背景画像（アップロード）<input id="bg-image-file" type="file" accept="image/*" /></label>
+            <label>画像（アップロード）
+              <input id="bg-image-file" type="file" accept="image/*" />
+            </label>
           </div>
           <div id="bg-image-url-row" style="display:none">
-            <label>背景画像URL<input id="bg-image-url" type="url" placeholder="https://..." /></label>
+            <label>画像URL
+              <input id="bg-image-url" type="url" placeholder="https://..." />
+            </label>
             <small class="tips">※ PNG書き出し時はCORS対応が必要です（印刷/PDFはOK）。</small>
           </div>
-          <label>表示方法
+          <label>フィット
             <select id="bg-fit">
-              <option value="cover" selected>画面いっぱい（切り抜き）</option>
-              <option value="contain">全体表示（余白あり）</option>
-              <option value="tile">タイル（繰り返し）</option>
+              <option value="cover" selected>カバー</option>
+              <option value="contain">コンテイン</option>
+              <option value="tile">タイル（並べる）</option>
             </select>
           </label>
         </div>
-      </section>
-
-      <section>
-        <h3>レイアウト調整</h3>
-        <label>手動スケール（%）
-          <input id="content-scale" type="range" min="80" max="120" step="1" value="100" />
-        </label><br>
-        <small class="tips">※ 自動スケールで安全枠に収め、さらに手動スケールで微調整できます。</small>
       </section>
 
       <section>
@@ -126,7 +151,7 @@
         <div id="logo-image-wrap" style="display:none">
           <label>ロゴ画像
             <input id="circle-logo" type="file" accept="image/*" />
-          </label><br>
+          </label>
           <small class="tips">推奨: 600×200px程度の透明PNG</small>
         </div>
         <label>スペースNo.<input id="space-no" type="text" placeholder="K-11 など" /></label>
@@ -142,7 +167,7 @@
           </label>
         </div>
 
-        <label>帯ラベル<input id="band-label" type="text" value="イベント名など" /></label>
+        <label>帯ラベル<input id="band-label" type="text" value="イベント名" /></label>
       </section>
 
       <section>
@@ -151,8 +176,8 @@
           <input id="new-section-name" type="text" placeholder="例: 新譜 / 既刊 / グッズ" />
           <button id="btn-add-section">追加</button>
         </div>
+        <!-- ここに JS が各セクションの「大/小」「列数」「左/右」UIを差し込みます -->
         <ul id="section-list" class="section-list"></ul>
-
         <div class="row-inline">
           <label style="flex:1">セクション間の縦間隔(mm)
             <input id="section-gap" type="number" min="0" step="1" value="8" />
@@ -169,25 +194,7 @@
             <input id="card-small-min" type="number" min="30" step="1" value="42" />
           </label>
         </div>
-
-        <!-- 列数/寄せ -->
-        <!-- <div class="row-inline">
-          <label style="flex:1">大カード 列数（0=自動）
-            <input id="cols-large" type="number" min="0" step="1" value="0" />
-          </label>
-          <label style="flex:1">小カード 列数（0=自動）
-            <input id="cols-small" type="number" min="0" step="1" value="0" />
-          </label>
-        </div> -->
-        <label>横揃え
-          <select id="grid-align">
-            <option value="start" selected>左</option>
-            <option value="center">中央</option>
-            <option value="end">右</option>
-          </select>
-        </label>
-
-        <small class="tips">※ 小カードの幅は大カードの最小幅を超えないよう自動制限されます。</small>
+        <small class="tips">※ 固定列時は最小幅を超えないよう自動調整します。中央寄せは固定列で有効です。</small>
       </section>
 
       <section>
@@ -215,21 +222,24 @@
         <label>タイトル<input id="item-title" type="text" /></label>
         <label>価格（空なら非表示）<input id="item-price" type="text" placeholder="500円 など" /></label>
 
-        <!-- NEW / R18 / R18G バッジ（画像対応） -->
-        <label class="chk"><input id="item-isnew" type="checkbox" /> NEWバッジを付ける</label><br>
-        <label>NEWバッジ画像（任意）
-          <input id="item-badge-image" type="file" accept="image/*" />
-        </label><br>
-
-        <label class="chk"><input id="item-isr18" type="checkbox" /> R18バッジを付ける</label><br>
-        <label>R18バッジ画像（任意）
-          <input id="item-badge-r18-image" type="file" accept="image/*" />
-        </label><br>
-
-        <label class="chk"><input id="item-isr18g" type="checkbox" /> R18Gバッジを付ける</label><br>
-        <label>R18Gバッジ画像（任意）
-          <input id="item-badge-r18g-image" type="file" accept="image/*" />
-        </label><br>
+        <div class="row-inline">
+          <label class="chk"><input id="item-isnew" type="checkbox" /> NEWバッジ</label>
+          <label>NEWバッジ画像（任意）
+            <input id="item-badge-image" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div class="row-inline">
+          <label class="chk"><input id="item-isr18" type="checkbox" /> R18</label>
+          <label>R18バッジ画像（任意）
+            <input id="item-badge-r18-image" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div class="row-inline">
+          <label class="chk"><input id="item-isr18g" type="checkbox" /> R18G</label>
+          <label>R18Gバッジ画像（任意）
+            <input id="item-badge-r18g-image" type="file" accept="image/*" />
+          </label>
+        </div>
 
         <label>説明（任意）
           <textarea id="item-desc" rows="3" placeholder="商品説明・収録内容など"></textarea>
@@ -249,15 +259,14 @@
           </label>
         </div>
 
-        <!-- オリジナルタグ -->
-        <label>オリジナルタグ（カンマ区切り）
+        <label>カスタムタグ（任意・カンマ/読点区切り）
           <input id="item-custom-tags" type="text" placeholder="既刊, 旧譜, グッズ など" />
         </label>
 
         <div class="row-inline">
           <button id="btn-add-item" class="accent">追加</button>
           <button id="btn-update-item" class="primary" hidden>更新</button>
-          <button id="btn-cancel-edit" hidden>編集終了</button>
+          <button id="btn-cancel-edit" hidden>編集キャンセル</button>
           <button id="btn-delete-item" class="danger" hidden>削除</button>
         </div>
       </section>
@@ -289,73 +298,70 @@
       <section>
         <h3>QR / 注記</h3>
         <label>QRリンクURL<input id="qr-url" type="url" placeholder="https://example.com" /></label>
+
         <div class="row-inline">
           <label style="flex:1">サイズ(mm)
             <input id="qr-size" type="number" min="10" step="1" value="32" />
           </label>
-          <label style="flex:1">余白(mm)
-            <input id="qr-padding" type="number" min="0" step="0.5" value="2" />
+          <label style="flex:1">内側余白(mm)
+            <input id="qr-padding" type="number" min="0" step="1" value="2" />
           </label>
         </div>
+        <label class="chk"><input id="qr-border-on" type="checkbox" /> 枠線を付ける</label>
         <div class="row-inline">
-          <label class="chk" style="flex:1"><input id="qr-border-on" type="checkbox" /> 枠線を表示</label>
-          <label style="flex:1">枠の太さ(mm)
+          <label style="flex:1">枠線の太さ(mm)
             <input id="qr-border-width" type="number" min="0" step="0.1" value="0.4" />
           </label>
-        </div>
-        <div class="row-inline">
-          <label style="flex:1">枠の色
+          <label style="flex:1">枠線の色
             <input id="qr-border-color" type="color" value="#222222" />
           </label>
-          <label style="flex:1">角丸(mm)
-            <input id="qr-border-radius" type="number" min="0" step="0.5" value="1.5" />
-          </label>
         </div>
+        <label>角丸(mm)
+          <input id="qr-border-radius" type="number" min="0" step="0.5" value="1.5" />
+        </label>
+
         <button id="btn-make-qr">QR生成</button>
 
         <label>注記テキスト<textarea id="note" rows="3" placeholder="その他詳細はWebへ など"></textarea></label>
       </section>
     </aside>
 
-    <!-- 右：編集キャンバス -->
+    <!-- 右のキャンバス（印刷領域） -->
     <section class="canvas-wrap">
       <div id="paper" class="paper a4 portrait">
         <div class="safe"></div>
         <div class="grid"></div>
 
-        <!-- 安全枠内 -->
         <div class="content">
           <div class="content-inner">
-
             <div class="header">
               <div class="header-row">
                 <div class="logo">
-                  <div class="logo-text" contenteditable="true">Cadente</div>
+                  <div class="logo-text" contenteditable="true">サークル名</div>
                   <img class="logo-img" alt="logo" />
                 </div>
-                <div class="spaceno" contenteditable="true">K-11</div>
+                <div class="spaceno" contenteditable="true">配置</div>
                 <div class="title" contenteditable="true">頒布物一覧</div>
               </div>
 
               <div class="band-wrap">
                 <div class="band"></div>
-                <div class="band-label" contenteditable="true">音楽CD</div>
+                <div class="band-label" contenteditable="true">イベント名</div>
               </div>
             </div>
 
+            <!-- セクションはJSがここへ（1列時）、
+                 2列時は左右のラッパを生成してそこに流し込みます -->
             <div id="sections-root"></div>
 
             <div class="footer">
               <div class="note" id="note-view" contenteditable="true">その他頒布物の詳細はコチラ→</div>
               <div id="qr" class="qr"></div>
             </div>
-
           </div>
         </div>
-        <!-- /安全枠内 -->
-
       </div>
-      <div class="tips">※ クリックでアイテム編集。自動スケールで常に安全枠内に収まります。</div>
+      <div class="tips">※ セクションの「左/右」「列数」はサイドバーの「セクション管理」で設定できます。</div>
     </section>
   </main>
 
