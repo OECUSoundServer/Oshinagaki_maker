@@ -15,7 +15,7 @@ const state = {
 
   // size: "large" | "small"
   // cols: 固定列数（0=自動）
-  // side: "left" | "right"（ページ2カラム時の配置先）
+  // side: "left" | "right" | "full"（full=全幅=1カラム）
   sections: { music: { name: "新譜", size: "large", cols: 0, side: "left", items: [] } },
   order: ["music"],
 
@@ -203,31 +203,26 @@ function applyBackground(){
   }
 }
 
-/* ========= ページ2カラム適用 ========= */
-function applyPageCols(){
-  const c = state.pageCols.count|0;
+/* ========= ページカラム（2列グリッド or 単列） ========= */
+// 右を使うセクションがあるなら2カラムを自動要請（fullだけなら1カラムのまま）
+function wantsTwoCols(){
+  if ((state.pageCols.count|0) === 2) return true;
+  return state.order.some(id => (state.sections[id].side || "left") === "right");
+}
+function applyPageCols(count = (state.pageCols.count|0)){
   const gap = Math.max(0, state.pageCols.gapMm);
-  // CSS変数（紙側だけ）
-  cssVar("--page-col-gap", `${gap}mm`, el.paper);
-
-  // sectionsRoot直下のレイアウトを更新（inlineで安全に）
   const root = el.sectionsRoot;
-  root.innerHTML = ""; // ラッパを作り直すため一旦クリア（renderSectionsが再構築）
-
-  // ここでは見た目の基本だけ用意。実際のセクションDOMは renderSections 内で左右に流し込む
-  if(c === 2){
-    const wrap = ce("div","page-cols-wrap");
-    wrap.style.display = "grid";
-    wrap.style.gridTemplateColumns = "1fr 1fr";
-    wrap.style.gap = `var(--page-col-gap, ${gap}mm)`;
-
-    const left = ce("div","page-col-left");
-    const right = ce("div","page-col-right");
-    wrap.appendChild(left);
-    wrap.appendChild(right);
-    root.appendChild(wrap);
+  // ルートそのものをグリッド化（左右の内側divを使わず、各セクションをグリッドアイテムに）
+  root.innerHTML = "";
+  if(count === 2){
+    root.style.display = "grid";
+    root.style.gridTemplateColumns = "1fr 1fr";
+    root.style.gap = `var(--page-col-gap, ${gap}mm)`;
+    cssVar("--page-col-gap", `${gap}mm`, el.paper);
   }else{
-    // 1列: 何も置かず、renderSections で直接 root に入れる
+    root.style.display = "block";
+    root.style.removeProperty("grid-template-columns");
+    root.style.removeProperty("gap");
   }
 }
 
@@ -347,9 +342,12 @@ function renderSectionList(){
       applyAutoColWidth();
     });
 
-    // 置き場所（左/右）
+    // 置き場所（左/右/全幅）
     const sideSel = document.createElement("select");
-    sideSel.innerHTML = `<option value="left">左</option><option value="right">右</option>`;
+    sideSel.innerHTML = `
+      <option value="left">左</option>
+      <option value="right">右</option>
+      <option value="full">全幅（1カラム）</option>`;
     sideSel.value = s.side || "left";
     sideSel.style.marginLeft = "6px";
     sideSel.addEventListener("change", ()=>{
@@ -387,130 +385,122 @@ function renderSectionList(){
 }
 
 function renderSections(){
-  // ページ2カラムのラッパをセットアップ
-  applyPageCols();
+  // 実カウント：右が存在すれば 2、無ければ UI 指定（1 or 2）
+  const count = wantsTwoCols() ? 2 : (state.pageCols.count|0);
 
-  // 挿入先を取得（1列 or 2列）
-  const count = state.pageCols.count|0;
+  // ルートを count に合わせて構築（2=グリッド、1=ブロック）
+  applyPageCols(count);
+
   const root = el.sectionsRoot;
-  const leftHost  = (count===2) ? root.querySelector(".page-col-left")  : root;
-  const rightHost = (count===2) ? root.querySelector(".page-col-right") : null;
 
-  if(count !== 2){
-    root.innerHTML = ""; // 1列のときは直接ルートに積むのでリセット
-  }else{
-    // 2列の場合、left/rightホストは applyPageCols 内で生成済み
-    leftHost.innerHTML = "";
-    rightHost.innerHTML = "";
-  }
+  // order の順に各セクションをグリッドに配置
+  state.order.forEach(secId=>{
+    const sec = state.sections[secId];
+    if(typeof sec.cols !== "number") sec.cols = 0;
+    if(!sec.side) sec.side = "left";
 
-  // order を left/right にフィルタして順に描画
-  const toRender = (host, side) => {
-    state.order.forEach(secId=>{
-      const sec = state.sections[secId];
-      if((count===2) && (sec.side || "left") !== side) return;
+    const wrap = ce("section", "section");
+    wrap.dataset.size = sec.size || "small"; // "large" | "small"
+    wrap.dataset.cols = sec.cols || 0;
 
-      if(typeof sec.cols !== "number") sec.cols = 0;
-      if(!sec.side) sec.side = "left";
+    // ★ 2カラム時のみ、sideでグリッド列を指定。full=1/3で全幅。
+    if(count === 2){
+      if(sec.side === "right"){
+        wrap.style.gridColumn = "2 / 3";
+      }else if(sec.side === "full"){
+        wrap.style.gridColumn = "1 / 3";
+      }else{
+        wrap.style.gridColumn = "1 / 2"; // left
+      }
+    }else{
+      wrap.style.removeProperty("grid-column");
+    }
 
-      const wrap = ce("section", "section");
-      wrap.dataset.size = sec.size || "small"; // "large" | "small"
-      wrap.dataset.cols = sec.cols || 0;
-
-      const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
-      h2.addEventListener("input", ()=>{
-        sec.name = h2.textContent;
-        renderSectionList();
-      });
-
-      const ul = ce("ul", "items"); ul.id = `items-${secId}`;
-      wrap.appendChild(h2); wrap.appendChild(ul); host.appendChild(wrap);
-
-      ul.innerHTML = "";
-      sec.items.forEach((it)=>{
-        if(!it.id) it.id = uid();
-
-        const li = ce("li", "item");
-        li.dataset.itemId = it.id;
-        if(it.layout === "right") li.classList.add("layout-right");
-
-        li.addEventListener("click", (e)=>{
-          e.stopPropagation();
-          startEditItemById(secId, li.dataset.itemId);
-        });
-
-        const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
-        li.appendChild(img);
-
-        // NEW / R18 / R18G バッジ
-        if(it.badgeSrc){
-          const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
-        } else if(it.isNew){
-          const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
-        }
-        let rightTopMm = 2;
-        const pushRight = (node)=>{ node.style.top = `${rightTopMm}mm`; node.style.right = `2mm`; rightTopMm += 14; };
-        if(it.badgeR18Src){ const bi = ce("img","badge-img-r18"); bi.src = it.badgeR18Src; pushRight(bi); li.appendChild(bi); }
-        else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
-        if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
-        else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
-
-        const textBox = ce("div");
-        if(it.layout === "right") li.appendChild(textBox);
-
-        const caption = ce("div", "caption"); caption.textContent = it.title || "";
-        const desc    = ce("div", "desc");    if(it.desc) desc.textContent = it.desc;
-
-        const meta = ce("div", "meta");
-        if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
-        if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
-        if(Array.isArray(it.customTags)){ it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t))); }
-
-        if(it.layout === "right"){
-          textBox.appendChild(caption);
-          if(it.desc) textBox.appendChild(desc);
-          if(meta.childElementCount) textBox.appendChild(meta);
-        }else{
-          li.appendChild(caption);
-          if(it.desc) li.appendChild(desc);
-          if(meta.childElementCount) li.appendChild(meta);
-        }
-
-        if (it.price && state.appearance.priceStyle!=="none") {
-          const price = ce("div", "price"); price.textContent = it.price; li.appendChild(price);
-        }
-
-        ul.appendChild(li);
-      });
-
-      // 並べ替え：DOMの順序から items を並び替える（ID基準）
-      new Sortable(ul, {
-        animation: 120,
-        onEnd: ()=>{
-          const ids = Array.from(ul.children).map(ch => ch.dataset.itemId);
-          sec.items.sort((a,b)=> ids.indexOf(a.id) - ids.indexOf(b.id));
-          applyAutoColWidth();
-          recomputeAutoScale();
-        }
-      });
+    const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
+    h2.addEventListener("input", ()=>{
+      sec.name = h2.textContent;
+      renderSectionList();
     });
-  };
 
-  if(count===2){
-    toRender(leftHost, "left");
-    toRender(rightHost, "right");
-  }else{
-    // 1列は side 無視で order のまま
-    toRender(root, "left");
-  }
+    const ul = ce("ul", "items"); ul.id = `items-${secId}`;
+    wrap.appendChild(h2); wrap.appendChild(ul); root.appendChild(wrap);
+
+    ul.innerHTML = "";
+    sec.items.forEach((it)=>{
+      if(!it.id) it.id = uid();
+
+      const li = ce("li", "item");
+      li.dataset.itemId = it.id;
+      if(it.layout === "right") li.classList.add("layout-right");
+
+      li.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        startEditItemById(secId, li.dataset.itemId);
+      });
+
+      const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
+      li.appendChild(img);
+
+      // NEW / R18 / R18G バッジ
+      if(it.badgeSrc){
+        const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
+      } else if(it.isNew){
+        const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
+      }
+      let rightTopMm = 2;
+      const pushRight = (node)=>{ node.style.top = `${rightTopMm}mm`; node.style.right = `2mm`; rightTopMm += 14; };
+      if(it.badgeR18Src){ const bi = ce("img","badge-img-r18"); bi.src = it.badgeR18Src; pushRight(bi); li.appendChild(bi); }
+      else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
+      if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
+      else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
+
+      const textBox = ce("div");
+      if(it.layout === "right") li.appendChild(textBox);
+
+      const caption = ce("div", "caption"); caption.textContent = it.title || "";
+      const desc    = ce("div", "desc");    if(it.desc) desc.textContent = it.desc;
+
+      const meta = ce("div", "meta");
+      if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
+      if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
+      if(Array.isArray(it.customTags)){ it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t))); }
+
+      if(it.layout === "right"){
+        textBox.appendChild(caption);
+        if(it.desc) textBox.appendChild(desc);
+        if(meta.childElementCount) textBox.appendChild(meta);
+      }else{
+        li.appendChild(caption);
+        if(it.desc) li.appendChild(desc);
+        if(meta.childElementCount) li.appendChild(meta);
+      }
+
+      if (it.price && state.appearance.priceStyle!=="none") {
+        const price = ce("div", "price"); price.textContent = it.price; li.appendChild(price);
+      }
+
+      ul.appendChild(li);
+    });
+
+    // 並べ替え：DOMの順序から items を並び替える（ID基準）
+    new Sortable(ul, {
+      animation: 120,
+      onEnd: ()=>{
+        const ids = Array.from(ul.children).map(ch => ch.dataset.itemId);
+        sec.items.sort((a,b)=> ids.indexOf(a.id) - ids.indexOf(b.id));
+        applyAutoColWidth();
+        recomputeAutoScale();
+      }
+    });
+  });
 
   recomputeAutoScale();
   applyAutoColWidth();
 }
 
 /* 列幅の自動計算（セクションごと）
-   - cols>0 なら 固定列。列幅 = min(等分幅, 最小幅) → 余白が残れば中央/右寄せが効く
-   - cols=0 なら CSSのauto-fill/minmaxに任せる（--colwは未設定） */
+   - cols>0 なら 固定列。列幅 = min(等分幅, 最小幅)
+   - cols=0 なら CSSのautoに任せる（--colw未設定） */
 function applyAutoColWidth(){
   state.order.forEach(secId=>{
     const sec = state.sections[secId];
@@ -673,7 +663,7 @@ on("btn-add-section","click", ()=>{
   if(!name) return;
   const idd = uid();
   const defSize = /新譜|新刊|新作/.test(name) ? "large" : "small";
-  // 新規は左に入れておく（2カラム時にわかりやすい）
+  // 新規は左に入れておく（必要ならサイドバーですぐ full/right に変えられる）
   state.sections[idd] = { name, size: defSize, cols: 0, side: "left", items: [] };
   state.order.push(idd);
   g("new-section-name").value = "";
@@ -692,7 +682,7 @@ on("grid-align","change", e=>{
   applyGridVars(); renderSections();
 });
 
-// ページカラム（存在すれば登録）
+// ページカラム（UIがあれば拾う）
 const _pc = g("page-cols"); if(_pc) _pc.addEventListener("change", e=>{
   state.pageCols.count = Math.max(1, Math.min(2, parseInt(e.target.value||"1",10)));
   renderSections();
@@ -951,6 +941,12 @@ on("btn-export-png","click", async ()=>{
 
 /* ========= 初期化 ========= */
 function init() {
+  // UIの初期値を拾う（存在すれば）
+  const pcEl = g("page-cols");
+  if (pcEl) state.pageCols.count = Math.max(1, Math.min(2, parseInt(pcEl.value||"1",10)));
+  const pcgEl = g("page-col-gap");
+  if (pcgEl) state.pageCols.gapMm = +pcgEl.value || 6;
+
   applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
   applyQrStyle();
   rerenderAll();
