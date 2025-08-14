@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>お品書きメーカー（軽量版）</title>
+  <title>お品書きメーカー（テスト版）</title>
 
   <!-- Google Fonts -->
   <link id="gf" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" />
@@ -11,7 +11,6 @@
 
   <!-- 依存CDN（順序重要：ライブラリ → app.js） -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <!-- QRCode グローバルを提供するライブラリ -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 </head>
@@ -64,10 +63,50 @@
       </section>
 
       <section>
+        <h3>背景</h3>
+        <label>背景の種類
+          <select id="bg-mode">
+            <option value="none">なし（透明/白）</option>
+            <option value="color" selected>単色</option>
+            <option value="image">画像</option>
+          </select>
+        </label>
+
+        <div id="bg-color-wrap">
+          <label>背景色
+            <input id="bg-color" type="color" value="#ffffff" />
+          </label>
+        </div>
+
+        <div id="bg-image-wrap" style="display:none">
+          <label>画像ソース
+            <select id="bg-image-source">
+              <option value="file" selected>アップロード</option>
+              <option value="url">URL</option>
+            </select>
+          </label>
+          <div id="bg-image-file-row">
+            <label>背景画像（アップロード）<input id="bg-image-file" type="file" accept="image/*" /></label>
+          </div>
+          <div id="bg-image-url-row" style="display:none">
+            <label>背景画像URL<input id="bg-image-url" type="url" placeholder="https://..." /></label>
+            <small class="tips">※ PNG書き出し時はCORS対応が必要です（印刷/PDFはOK）。</small>
+          </div>
+          <label>表示方法
+            <select id="bg-fit">
+              <option value="cover" selected>画面いっぱい（切り抜き）</option>
+              <option value="contain">全体表示（余白あり）</option>
+              <option value="tile">タイル（繰り返し）</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section>
         <h3>レイアウト調整</h3>
         <label>手動スケール（%）
           <input id="content-scale" type="range" min="80" max="120" step="1" value="100" />
-        </label>
+        </label><br>
         <small class="tips">※ 自動スケールで安全枠に収め、さらに手動スケールで微調整できます。</small>
       </section>
 
@@ -87,7 +126,7 @@
         <div id="logo-image-wrap" style="display:none">
           <label>ロゴ画像
             <input id="circle-logo" type="file" accept="image/*" />
-          </label>
+          </label><br>
           <small class="tips">推奨: 600×200px程度の透明PNG</small>
         </div>
         <label>スペースNo.<input id="space-no" type="text" placeholder="K-11 など" /></label>
@@ -103,7 +142,7 @@
           </label>
         </div>
 
-        <label>帯ラベル<input id="band-label" type="text" value="音楽CD" /></label>
+        <label>帯ラベル<input id="band-label" type="text" value="イベント名など" /></label>
       </section>
 
       <section>
@@ -131,7 +170,7 @@
           </label>
         </div>
 
-        <!-- ▼ 列数/寄せ -->
+        <!-- 列数/寄せ -->
         <div class="row-inline">
           <label style="flex:1">大カード 列数（0=自動）
             <input id="cols-large" type="number" min="0" step="1" value="0" />
@@ -177,20 +216,20 @@
         <label>価格（空なら非表示）<input id="item-price" type="text" placeholder="500円 など" /></label>
 
         <!-- NEW / R18 / R18G バッジ（画像対応） -->
-        <label class="chk"><input id="item-isnew" type="checkbox" /> NEWバッジを付ける</label>
+        <label class="chk"><input id="item-isnew" type="checkbox" /> NEWバッジを付ける</label><br>
         <label>NEWバッジ画像（任意）
           <input id="item-badge-image" type="file" accept="image/*" />
-        </label>
+        </label><br>
 
-        <label class="chk"><input id="item-isr18" type="checkbox" /> R18バッジを付ける</label>
+        <label class="chk"><input id="item-isr18" type="checkbox" /> R18バッジを付ける</label><br>
         <label>R18バッジ画像（任意）
           <input id="item-badge-r18-image" type="file" accept="image/*" />
-        </label>
+        </label><br>
 
-        <label class="chk"><input id="item-isr18g" type="checkbox" /> R18Gバッジを付ける</label>
+        <label class="chk"><input id="item-isr18g" type="checkbox" /> R18Gバッジを付ける</label><br>
         <label>R18Gバッジ画像（任意）
           <input id="item-badge-r18g-image" type="file" accept="image/*" />
-        </label>
+        </label><br>
 
         <label>説明（任意）
           <textarea id="item-desc" rows="3" placeholder="商品説明・収録内容など"></textarea>

@@ -3,12 +3,12 @@ const state = {
   paper: { size: "A4", orientation: "portrait", margin: 10 },
   header: {
     logoMode: "text",
-    circle: "Cadente",
+    circle: "サークル名",
     logoSrc: "",
-    space: "K-11",
+    space: "配置",
     title: "頒布物一覧",
     band: "#d98181",
-    bandLabel: "音楽CD",
+    bandLabel: "イベント名",
     bandHeight: 6,     // mm
     bandInset: 0       // mm
   },
@@ -25,6 +25,8 @@ const state = {
   appearance: { priceStyle: "box", tagStyle: "outline" },
 
   grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42, colsLarge: 0, colsSmall: 0, align: "start" },
+
+  background: { mode: "color", color: "#ffffff", imageSrc: "", fit: "cover" },
 
   editing: null
 };
@@ -58,7 +60,7 @@ const gfMap = {
   "Shippori Mincho": "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&display=swap"
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
-const cssVar = (k,v)=>document.documentElement.style.setProperty(k,v);
+const cssVar = (k,v,target=document.documentElement)=>target.style.setProperty(k,v);
 
 function g(id){ return document.getElementById(id); }
 function qs(sel){ return document.querySelector(sel); }
@@ -128,6 +130,34 @@ function applyGridVars(){
 function applyBandTune(){
   cssVar("--band-height", `${state.header.bandHeight}mm`);
   cssVar("--band-inset", `${state.header.bandInset}mm`);
+}
+
+/* ========= 背景適用 ========= */
+function applyBackground(){
+  const p = el.paper;
+  const {mode, color, imageSrc, fit} = state.background;
+
+  if(mode === "none"){
+    cssVar("--paper-bg-color", "#ffffff", p);
+    cssVar("--paper-bg-image", "none", p);
+    cssVar("--paper-bg-size", "auto", p);
+    cssVar("--paper-bg-repeat", "no-repeat", p);
+  } else if(mode === "color"){
+    cssVar("--paper-bg-color", color || "#ffffff", p);
+    cssVar("--paper-bg-image", "none", p);
+    cssVar("--paper-bg-size", "auto", p);
+    cssVar("--paper-bg-repeat", "no-repeat", p);
+  } else { // image
+    cssVar("--paper-bg-color", "#ffffff", p); // 下地は白
+    cssVar("--paper-bg-image", imageSrc ? `url("${imageSrc}")` : "none", p);
+    if(fit === "tile"){
+      cssVar("--paper-bg-size", "auto", p);
+      cssVar("--paper-bg-repeat", "repeat", p);
+    }else{
+      cssVar("--paper-bg-size", fit === "contain" ? "contain" : "cover", p);
+      cssVar("--paper-bg-repeat", "no-repeat", p);
+    }
+  }
 }
 
 /* ========= レンダリング ========= */
@@ -254,7 +284,6 @@ function renderSections(){
       const meta = ce("div", "meta");
       if(it.pages){ meta.appendChild(tagEl(`${it.pages}ページ`)); }
       if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
-      // オリジナルタグ（既刊/旧譜/グッズなど）
       if(Array.isArray(it.customTags)){
         it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t)));
       }
@@ -311,7 +340,7 @@ function refreshSectionSelect(){
 function rerenderAll(){
   applyPaper(); applyTypography(); renderHeader();
   renderSectionList(); renderSections(); refreshSectionSelect();
-  applyItemBorder(); applyAppearance(); applyGridVars(); applyBandTune();
+  applyItemBorder(); applyAppearance(); applyGridVars(); applyBandTune(); applyBackground();
 }
 
 /* ========= スタイル適用 ========= */
@@ -346,6 +375,35 @@ on("grid","change", e=>{ el.paper.classList.toggle("show-grid", e.target.checked
 // フォント
 on("font-family","change", e=>{ state.typography.family = e.target.value; rerenderAll(); });
 on("base-pt","input", e=>{ state.typography.basePt = Math.max(8, Math.min(24, +e.target.value || 11)); rerenderAll(); });
+
+// 背景
+on("bg-mode","change", e=>{
+  state.background.mode = e.target.value;
+  g("bg-color-wrap").style.display      = (state.background.mode==="color") ? "" : "none";
+  g("bg-image-wrap").style.display      = (state.background.mode==="image") ? "" : "none";
+  applyBackground(); recomputeAutoScale();
+});
+on("bg-color","input", e=>{
+  state.background.color = e.target.value || "#ffffff";
+  applyBackground();
+});
+on("bg-image-source","change", e=>{
+  const m = e.target.value;
+  g("bg-image-file-row").style.display = (m==="file") ? "" : "none";
+  g("bg-image-url-row").style.display  = (m==="url")  ? "" : "none";
+});
+on("bg-image-file","change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  state.background.imageSrc = await fileToDataURL(f, 2000, 0.9);
+  applyBackground(); recomputeAutoScale();
+});
+on("bg-image-url","change", e=>{
+  state.background.imageSrc = e.target.value.trim();
+  applyBackground(); recomputeAutoScale();
+});
+on("bg-fit","change", e=>{
+  state.background.fit = e.target.value; applyBackground();
+});
 
 // 手動スケール
 on("content-scale","input", e=>{ state.layout.userScale = +e.target.value; applyContentScale(); });
@@ -438,7 +496,6 @@ on("btn-add-item","click", async ()=>{
     src = url;
   }
 
-  // バッジ
   const isNew  = g("item-isnew").checked;
   const isR18  = g("item-isr18").checked;
   const isR18G = g("item-isr18g").checked;
@@ -452,7 +509,6 @@ on("btn-add-item","click", async ()=>{
   const pages  = +v("item-pages") || 0;
   const tracks = +v("item-tracks") || 0;
 
-  // オリジナルタグ
   const customTags = v("item-custom-tags")
     .split(/[、,]/).map(s=>s.trim()).filter(Boolean);
 
@@ -493,15 +549,12 @@ function startEditItem(secId, index){
   g("item-pages").value  = it.pages || "";
   g("item-tracks").value = it.tracks || "";
 
-  // オリジナルタグ
   g("item-custom-tags").value = (it.customTags || []).join(", ");
 
   g("item-image-source").value = it.src && /^https?:/.test(it.src) ? "url" : "file";
   g("item-image-file-wrap").style.display = g("item-image-source").value==="file" ? "" : "none";
   g("item-image-url-wrap").style.display  = g("item-image-source").value==="url"  ? "" : "none";
   g("item-image-url").value = /^https?:/.test(it.src) ? it.src : "";
-
-  // 画像ファイル入力はユーザーのローカル権限的に復元不可のため触らない
 
   el.btnAdd.hidden = true;
   el.btnUpdate.hidden = false;
@@ -535,7 +588,6 @@ function applyEditToItem(){
     if(file){ fileToDataURL(file).then(data=>{ it.src = data; renderSections(); }); }
   }
 
-  // 任意のバッジ画像の更新
   const badgeFileNew  = g("item-badge-image").files[0];
   const badgeFileR18  = g("item-badge-r18-image").files[0];
   const badgeFileR18G = g("item-badge-r18g-image").files[0];
@@ -639,7 +691,14 @@ on("btn-export-png","click", async ()=>{
   const showSafe = node.classList.contains("show-safe");
   const showGrid = node.classList.contains("show-grid");
   node.classList.remove("show-safe","show-grid");
-  const canvas = await html2canvas(node, { scale: 1.0, backgroundColor: "#ffffff", useCORS: true });
+  node.classList.add("exporting");
+
+  // CSS背景をそのまま使う（backgroundColor:null）。影はCSSで無効化済み。
+  const canvas = await html2canvas(node, {
+    scale: 2,
+    backgroundColor: null,
+    useCORS: true
+  });
   await new Promise(res=>canvas.toBlob(blob=>{
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -648,13 +707,15 @@ on("btn-export-png","click", async ()=>{
     setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
     res();
   }, "image/png"));
+
+  node.classList.remove("exporting");
   if(showSafe) node.classList.add("show-safe");
   if(showGrid) node.classList.add("show-grid");
 });
 
 /* ========= 初期化 ========= */
 function init() {
-  applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune();
+  applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
   rerenderAll();
 
   const ro = new ResizeObserver(()=> recomputeAutoScale());

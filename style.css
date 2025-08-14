@@ -31,6 +31,13 @@
   --cols-large: 0;       /* 0 = 自動 */
   --cols-small: 0;       /* 0 = 自動 */
   --grid-justify: start; /* start | center | end（自動時のみ有効） */
+
+  /* 背景（CSS変数で管理） */
+  --paper-bg-color: #ffffff;
+  --paper-bg-image: none;              /* url("...") or none */
+  --paper-bg-size: cover;              /* cover | contain | auto */
+  --paper-bg-repeat: no-repeat;        /* no-repeat | repeat */
+  --paper-bg-position: center center;  /* 常に中央基準 */
 }
 
 * { box-sizing: border-box; }
@@ -60,6 +67,7 @@ body {
 
 /* サイド/メイン */
 .main { display:grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; }
+
 /* サイドパネル：中だけ縦スクロール。横は出さない */
 .panel{
   background:#fff;
@@ -70,46 +78,17 @@ body {
   position: sticky;
   top: 64px;
   max-height: calc(100vh - 64px - 16px);
-  overflow-y: auto;   /* ← 縦だけ */
-  overflow-x: hidden; /* ← 横は常に非表示 */
+  overflow-y: auto;     /* ← 縦だけ */
+  overflow-x: hidden;   /* ← 横は隠す */
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-
-/* 入力UIが横にはみ出さないよう保険 */
 .panel .row-inline{ display:flex; gap:8px; flex-wrap: wrap; }
-.panel .row-inline > *{ min-width: 0; } /* flexアイテムの横はみ出し防止 */
-.panel input[type="text"],
-.panel input[type="number"],
-.panel input[type="url"],
-.panel select,
-.panel textarea{
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding:8px; border:1px solid #ddd; border-radius:8px; font: inherit;
-}
-
-/* （お好みで）スクロールバーの見た目 */
-.panel::-webkit-scrollbar{ width: 10px; }
-.panel::-webkit-scrollbar-track{ background: #f6f6f7; border-radius: 8px; }
-.panel::-webkit-scrollbar-thumb{ background: #cfcfd4; border-radius: 8px; border: 2px solid #f6f6f7; }
-
-/* 幅が狭い時のレイアウト維持（参考） */
-@media (max-width: 1200px){
-  .main{ grid-template-columns: minmax(300px, 36vw) 1fr; }
-}
-@media (max-width: 800px){
-  .main{ grid-template-columns: 1fr; }
-  .panel{ position: static; max-height: none; overflow: visible; }
-}
-.panel h3 { margin: 8px 0; font-size: 14px; opacity: .8; }
-.panel label { display: grid; gap:6px; font-size: 12px; margin: 8px 0; }
+.panel .row-inline > *{ min-width: 0; }
 .panel input[type="text"], .panel input[type="number"], .panel input[type="url"], .panel select, .panel textarea{
+  width: 100%; max-width: 100%;
   padding:8px; border:1px solid #ddd; border-radius:8px; font: inherit;
 }
-.panel .chk { display:flex; align-items:center; gap:8px; }
-.row-inline{ display:flex; gap:8px; }
 .section-list{ list-style:none; margin:8px 0 0; padding:0; }
 .section-list li{ display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid #eee; border-radius:8px; background:#fafafa; margin-bottom:6px; }
 .section-list li .name[contenteditable]{ padding:2px 4px; border-radius:4px; }
@@ -118,9 +97,25 @@ body {
 .canvas-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
 .tips { font-size: 12px; opacity: .7; }
 
-/* 用紙 */
-.paper { width: var(--paper-w); height: var(--paper-h); background:#fff; position: relative; box-shadow: 0 6px 24px rgba(0,0,0,.08); overflow: hidden; }
+/* 用紙：背景はCSS変数を使う（PNG時の色ズレ回避にも有効） */
+.paper {
+  width: var(--paper-w);
+  height: var(--paper-h);
+  position: relative;
+  overflow: hidden;
+
+  /* 背景指定 */
+  background-color: var(--paper-bg-color);
+  background-image: var(--paper-bg-image);
+  background-size: var(--paper-bg-size);
+  background-repeat: var(--paper-bg-repeat);
+  background-position: var(--paper-bg-position);
+
+  box-shadow: 0 6px 24px rgba(0,0,0,.08);
+}
 .paper.landscape { width: var(--paper-h); height: var(--paper-w); }
+/* 書き出し時は影を消す（背景がくすむのを防ぐ） */
+.paper.exporting { box-shadow: none !important; }
 
 /* セーフエリア可視化 */
 .safe { position:absolute; inset: var(--margin); outline: 0.3mm dashed rgba(0,0,0,.3); pointer-events:none; display:none; }
@@ -169,7 +164,7 @@ body {
 .section .items{
   list-style:none; margin:0; padding:0;
   display:grid; gap: var(--items-gap);
-  justify-content: var(--grid-justify); /* 自動時に効く：start|center|end */
+  justify-content: var(--grid-justify); /* 自動時：start|center|end */
 }
 /* 自動（data-cols="0"） */
 .section[data-size="large"][data-cols="0"] .items{
@@ -218,7 +213,7 @@ body {
   margin-top: 1mm; font-size: calc(var(--base-pt) * .95); line-height: 1.5; color: #333;
 }
 
-/* メタタグ（ページ/曲＋オリジナルタグ）— outline/filled/none 切替 */
+/* メタタグ（ページ/曲＋オリジナルタグ）— outline/filled/none */
 .item .meta{ margin-top: .6mm; font-size: calc(var(--base-pt) * .88); color: #555; display:flex; gap: 3mm; flex-wrap:wrap; }
 .item .meta .tag{
   border: .25mm solid #bbb; border-radius: .9mm; padding: .4mm 1.4mm; white-space: nowrap; background: transparent;
@@ -244,7 +239,7 @@ body {
 }
 .item .badge-img { position:absolute; left: 2mm; top: 2mm; width: 12mm; height: 12mm; object-fit: contain; pointer-events:none; }
 
-/* R18 / R18G バッジ（右上に縦積み） */
+/* R18 / R18G バッジ（右上・縦積み） */
 .item .badge-r18{
   position:absolute; right: 2mm; top: 2mm; background:#c62828; color:#fff;
   padding:.6mm 2mm; font-weight:900; font-size: calc(var(--base-pt) * .9);
