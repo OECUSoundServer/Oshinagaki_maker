@@ -12,7 +12,9 @@ const state = {
     bandHeight: 6,     // mm
     bandInset: 0       // mm
   },
-  sections: { music: { name: "新譜", size: "large", items: [] } },
+  // size: "large" | "small" | "two"（←2段組み）
+  // cols: 固定列数（0=自動）。two のときは無視して常に2列。
+  sections: { music: { name: "新譜", size: "large", cols: 0, items: [] } },
   order: ["music"],
 
   note: "その他頒布物の詳細はコチラ→",
@@ -24,7 +26,8 @@ const state = {
   itemBorder: { on: true, width: 0.3 },         // mm
   appearance: { priceStyle: "box", tagStyle: "outline" },
 
-  grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42, colsLarge: 0, colsSmall: 0, align: "start" },
+  // largeMin / smallMin は min 幅の基準（小は大より大きくならない制御はCSS側で維持）
+  grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42, align: "start" },
 
   background: { mode: "color", color: "#ffffff", imageSrc: "", fit: "cover" },
 
@@ -55,7 +58,7 @@ const sizeMap = {
 };
 const gfMap = {
   "Noto Sans JP": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap",
-  "M PLUS 1p": "https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700;900&display=swap",
+  "M PLUS 1p": "https://fonts.googleapis.com/css2?family=M+PLUS+1p&wght@400;700;900&display=swap",
   "Kosugi Maru": "https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap",
   "Shippori Mincho": "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&display=swap"
 };
@@ -145,8 +148,6 @@ function applyGridVars(){
   cssVar("--items-gap", `${state.grid.itemsGap}mm`);
   cssVar("--card-large-min", `${state.grid.largeMin}mm`);
   cssVar("--card-small-min", `${Math.min(state.grid.smallMin, Math.max(31, state.grid.largeMin-1))}mm`);
-  cssVar("--cols-large", String(Math.max(0, state.grid.colsLarge|0)));
-  cssVar("--cols-small", String(Math.max(0, state.grid.colsSmall|0)));
   cssVar("--grid-justify", state.grid.align);
   recomputeAutoScale();
   applyAutoColWidth();
@@ -203,31 +204,63 @@ function renderHeader(){
   recomputeAutoScale();
 }
 
+function sizeLabel(sz){
+  return sz === "large" ? "大" : sz === "small" ? "小" : "2段";
+}
+function nextSize(sz){
+  return sz === "large" ? "small" : sz === "small" ? "two" : "large";
+}
+
 function renderSectionList(){
   el.sectionList.innerHTML = "";
   state.order.forEach(id=>{
     const s = state.sections[id];
+    // 後方互換: 既存セクションに cols が無ければ 0 を入れておく
+    if(typeof s.cols !== "number") s.cols = 0;
+
     const li = document.createElement("li");
 
+    // セクション名（編集可能）
     const name = document.createElement("div");
     name.className = "name";
     name.contentEditable = "true";
     name.textContent = s.name;
     name.addEventListener("input", ()=>{
       s.name = name.textContent;
-      if(/新譜|新刊|新作/.test(s.name)) s.size = s.size || "large";
       renderSections(); refreshSectionSelect();
     });
 
-    const density = document.createElement("button");
-    density.textContent = s.size === "large" ? "大" : "小";
-    density.style.minWidth = "2.5em";
-    density.addEventListener("click", ()=>{
-      s.size = (s.size === "large" ? "small" : "large");
-      density.textContent = s.size === "large" ? "大" : "小";
+    // モード（大/小/2段）サイクル
+    const modeBtn = document.createElement("button");
+    modeBtn.textContent = sizeLabel(s.size || "small");
+    modeBtn.style.minWidth = "3.2em";
+    modeBtn.addEventListener("click", ()=>{
+      s.size = nextSize(s.size || "small");
+      modeBtn.textContent = sizeLabel(s.size);
+      // 2段のときは列数入力は無効化（ビジュアル上は動作するが意味が無い）
+      colsInput.disabled = (s.size === "two");
       renderSections();
+      applyAutoColWidth();
     });
 
+    // 列数（0=自動）
+    const colsInput = document.createElement("input");
+    colsInput.type = "number";
+    colsInput.className = "cols-input";
+    colsInput.min = 0;
+    colsInput.value = s.cols || 0;
+    colsInput.title = "列数（0=自動）";
+    colsInput.style.width = "4.2em";
+    colsInput.style.marginLeft = "6px";
+    colsInput.disabled = (s.size === "two");
+    colsInput.addEventListener("input", ()=>{
+      const n = Math.max(0, parseInt(colsInput.value || "0", 10));
+      s.cols = n;
+      renderSections();
+      applyAutoColWidth();
+    });
+
+    // 削除
     const del = document.createElement("button");
     del.className = "btn-del"; del.textContent = "🗑";
     del.addEventListener("click", ()=>{
@@ -238,7 +271,8 @@ function renderSectionList(){
     });
 
     li.appendChild(name);
-    li.appendChild(density);
+    li.appendChild(modeBtn);
+    li.appendChild(colsInput);
     li.appendChild(del);
     el.sectionList.appendChild(li);
   });
@@ -257,14 +291,15 @@ function renderSections(){
   el.sectionsRoot.innerHTML = "";
   state.order.forEach(secId=>{
     const sec = state.sections[secId];
+    if(typeof sec.cols !== "number") sec.cols = 0;
+
     const wrap = ce("section", "section");
-    wrap.dataset.size = sec.size || (/新譜|新刊|新作/.test(sec.name) ? "large" : "small");
-    wrap.dataset.cols = (wrap.dataset.size === "large" ? state.grid.colsLarge : state.grid.colsSmall) || 0;
+    wrap.dataset.size = sec.size || "small"; // "large" | "small" | "two"
+    wrap.dataset.cols = sec.cols || 0;
 
     const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
     h2.addEventListener("input", ()=>{
       sec.name = h2.textContent;
-      if(!sec.size && /新譜|新刊|新作/.test(sec.name)) sec.size = "large";
       renderSectionList();
     });
 
@@ -273,7 +308,6 @@ function renderSections(){
 
     ul.innerHTML = "";
     sec.items.forEach((it)=>{
-      // 各アイテムは必ず一意IDを持つ
       if(!it.id) it.id = uid();
 
       const li = ce("li", "item");
@@ -288,7 +322,7 @@ function renderSections(){
       const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
       li.appendChild(img);
 
-      /* --- バッジ：NEW（左上）＋ R18/R18G（右上で縦積み） --- */
+      // NEW / R18 / R18G バッジ
       if(it.badgeSrc){
         const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
       } else if(it.isNew){
@@ -300,7 +334,6 @@ function renderSections(){
       else if(it.isR18){ const b = ce("div","badge-r18"); b.textContent="R18"; pushRight(b); li.appendChild(b); }
       if(it.badgeR18GSrc){ const bi = ce("img","badge-img-r18g"); bi.src = it.badgeR18GSrc; pushRight(bi); li.appendChild(bi); }
       else if(it.isR18G){ const b = ce("div","badge-r18g"); b.textContent="R18G"; pushRight(b); li.appendChild(b); }
-      /* --- /バッジ --- */
 
       const textBox = ce("div");
       if(it.layout === "right") li.appendChild(textBox);
@@ -311,9 +344,7 @@ function renderSections(){
       const meta = ce("div", "meta");
       if(it.pages){  meta.appendChild(tagEl(`${it.pages}ページ`)); }
       if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
-      if(Array.isArray(it.customTags)){
-        it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t)));
-      }
+      if(Array.isArray(it.customTags)){ it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t))); }
 
       if(it.layout === "right"){
         textBox.appendChild(caption);
@@ -348,34 +379,46 @@ function renderSections(){
   applyAutoColWidth();
 }
 
-/* 列数>0：等分幅と最小幅の小さい方を列幅に → 余白が残れば中央/右寄せが効く */
+/* 列幅の自動計算（セクションごと）
+   - size==="two" なら 2段固定（親幅を2分割）
+   - cols>0 なら 固定列。列幅 = min(等分幅, 最小幅) → 余白が残れば中央/右寄せが効く
+   - cols=0 なら CSSのauto-fill/minmaxに任せる（--colwは未設定） */
 function applyAutoColWidth(){
-  document.querySelectorAll(".section").forEach(secEl=>{
-    const size = secEl.dataset.size; // "large" | "small"
-    const cols = (size === "large" ? (state.grid.colsLarge|0) : (state.grid.colsSmall|0));
-    const ul = secEl.querySelector(".items");
+  state.order.forEach(secId=>{
+    const sec = state.sections[secId];
+    const ul = document.getElementById(`items-${secId}`);
     if(!ul) return;
 
-    if(!cols){
-      ul.style.removeProperty("--colw"); // 自動列モード
+    const size = sec.size || "small";
+    const cols = (size === "two") ? 2 : (sec.cols|0);
+
+    // 2段組み
+    if(size === "two"){
+      ul.style.removeProperty("--colw");
+      ul.style.gridTemplateColumns = `repeat(2, minmax(0, 1fr))`;
       return;
     }
+
+    // 自動列
+    if(!cols){
+      ul.style.removeProperty("--colw");
+      ul.style.removeProperty("grid-template-columns");
+      return;
+    }
+
+    // 固定列：等分幅と最小幅の小さい方を採用
     const st  = getComputedStyle(ul);
     const gap = parseFloat(st.gap) || 0;     // px
     const w   = ul.clientWidth;              // px
-
-    // ぴったり等分幅
     const exact = Math.max(1, (w - gap * (cols - 1)) / cols);
 
-    // CSS変数の最小幅（mm → px）
     const minVar = size === "large" ? "--card-large-min" : "--card-small-min";
     const minLen = getComputedStyle(document.documentElement).getPropertyValue(minVar);
     const minPx  = cssLengthToPx(minLen);
 
-    // 列幅：コンテナが広い時は最小幅に固定（→左右余白ができ、justify-content が効く）
-    //       狭い時は等分幅で詰めて収める
-    const col = Math.max(60, Math.min(exact, minPx));
+    const col = Math.max(60, Math.min(exact, minPx)); // 下限60pxは保険
     ul.style.setProperty("--colw", `${col}px`);
+    ul.style.gridTemplateColumns = `repeat(${cols}, minmax(var(--colw), var(--colw)))`;
   });
 }
 
@@ -503,34 +546,27 @@ on("band-inset","input", e=>{ state.header.bandInset = +e.target.value; applyBan
   });
 });
 
-// セクション管理
+// セクション管理（追加）
 on("btn-add-section","click", ()=>{
   const name = g("new-section-name").value.trim();
   if(!name) return;
   const idd = uid();
-  const size = /新譜|新刊|新作/.test(name) ? "large" : "small";
-  state.sections[idd] = { name, size, items: [] };
+  // デフォルトは：新譜/新刊/新作 → large、それ以外 small
+  const defSize = /新譜|新刊|新作/.test(name) ? "large" : "small";
+  state.sections[idd] = { name, size: defSize, cols: 0, items: [] };
   state.order.push(idd);
   g("new-section-name").value = "";
   renderSectionList(); renderSections(); refreshSectionSelect();
 });
 
-// 余白やサイズ類
+// 余白やサイズ類（全体の最小幅はCSS変数に）
 on("section-gap","input", e=>{ state.grid.sectionGap = +e.target.value; applyGridVars(); });
 on("items-gap","input", e=>{ state.grid.itemsGap = +e.target.value; applyGridVars(); applyAutoColWidth(); });
 on("card-large-min","input", e=>{ state.grid.largeMin = +e.target.value; applyGridVars(); });
 on("card-small-min","input", e=>{ state.grid.smallMin = +e.target.value; applyGridVars(); });
 
-// 列数と横揃え
-on("cols-large", "input", e=>{
-  state.grid.colsLarge = Math.max(0, parseInt(e.target.value||"0",10));
-  renderSections(); applyGridVars(); applyAutoColWidth();
-});
-on("cols-small", "input", e=>{
-  state.grid.colsSmall = Math.max(0, parseInt(e.target.value||"0",10));
-  renderSections(); applyGridVars(); applyAutoColWidth();
-});
-on("grid-align", "change", e=>{
+// 横揃え（全体）
+on("grid-align","change", e=>{
   state.grid.align = e.target.value; // start | center | end
   applyGridVars(); renderSections();
 });
@@ -581,7 +617,7 @@ on("btn-add-item","click", async ()=>{
   ]);
 
   state.sections[sec].items.push({
-    id: uid(), // ★ 一意ID
+    id: uid(),
     title, price, src, isNew, badgeSrc,
     isR18, badgeR18Src,
     isR18G, badgeR18GSrc,
