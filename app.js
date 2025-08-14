@@ -24,9 +24,9 @@ const state = {
   itemBorder: { on: true, width: 0.3 },         // mm
   appearance: { priceStyle: "box", tagStyle: "outline" },
 
-  grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42 },
+  grid: { sectionGap: 8, itemsGap: 4, largeMin: 70, smallMin: 42, colsLarge: 0, colsSmall: 0, align: "start" },
 
-  editing: null     // {secId, index}
+  editing: null
 };
 
 /* ========= 参照 ========= */
@@ -45,7 +45,7 @@ const el = {
 };
 const gf = g("gf");
 
-/* ========= 定義 ========= */
+/* ========= 定数/ユーティリティ ========= */
 const sizeMap = {
   A3: { w: "297mm", h: "420mm" },
   A4: { w: "210mm", h: "297mm" },
@@ -59,6 +59,11 @@ const gfMap = {
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const cssVar = (k,v)=>document.documentElement.style.setProperty(k,v);
+
+function g(id){ return document.getElementById(id); }
+function qs(sel){ return document.querySelector(sel); }
+function ce(tag, cls){ const n=document.createElement(tag); if(cls) n.className=cls; return n; }
+function v(id){ return g(id).value.trim(); }
 
 /* ========= 画像：圧縮読み込み（最大辺1600px, JPEG85%） ========= */
 async function fileToDataURL(file, maxSide = 1600, quality = 0.85){
@@ -77,16 +82,19 @@ async function fileToDataURL(file, maxSide = 1600, quality = 0.85){
   return dataUrl;
 }
 
-/* ========= 自動スケール（軽量） ========= */
+/* ========= 自動スケール（チカチカ解消版） ========= */
 let _recalcTimer = null;
 function recomputeAutoScale(){
   clearTimeout(_recalcTimer);
   _recalcTimer = setTimeout(()=>{
-    cssVar("--content-scale", "1");
+    const cs = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue("--content-scale")) || 1;
     (window.requestIdleCallback || window.requestAnimationFrame)(()=>{
       const inner = el.contentInner.getBoundingClientRect();
       const frame = el.content.getBoundingClientRect();
-      const auto = Math.min(frame.width/inner.width, frame.height/inner.height, 1) || 1;
+      const innerW = inner.width / cs;
+      const innerH = inner.height / cs;
+      const auto = Math.min(frame.width/innerW, frame.height/innerH, 1) || 1;
       state.layout.autoScale = Math.round(auto * 100);
       applyContentScale();
     });
@@ -112,6 +120,9 @@ function applyGridVars(){
   cssVar("--items-gap", `${state.grid.itemsGap}mm`);
   cssVar("--card-large-min", `${state.grid.largeMin}mm`);
   cssVar("--card-small-min", `${Math.min(state.grid.smallMin, Math.max(31, state.grid.largeMin-1))}mm`);
+  cssVar("--cols-large", String(Math.max(0, state.grid.colsLarge|0)));
+  cssVar("--cols-small", String(Math.max(0, state.grid.colsSmall|0)));
+  cssVar("--grid-justify", state.grid.align);
   recomputeAutoScale();
 }
 function applyBandTune(){
@@ -194,6 +205,7 @@ function renderSections(){
     const sec = state.sections[id];
     const wrap = ce("section", "section");
     wrap.dataset.size = sec.size || (/新譜|新刊|新作/.test(sec.name) ? "large" : "small");
+    wrap.dataset.cols = (wrap.dataset.size === "large" ? state.grid.colsLarge : state.grid.colsSmall) || 0;
 
     const h2 = ce("h2"); h2.contentEditable = "true"; h2.textContent = sec.name;
     h2.addEventListener("input", ()=>{
@@ -215,10 +227,22 @@ function renderSections(){
       const img = ce("img", "thumb"); img.src = it.src; img.alt = it.title || "";
       li.appendChild(img);
 
+      // NEW バッジ
       if(it.badgeSrc){
         const bi = ce("img", "badge-img"); bi.src = it.badgeSrc; li.appendChild(bi);
       } else if(it.isNew){
         const b = ce("div", "badge"); b.textContent = "NEW"; li.appendChild(b);
+      }
+      // R18 / R18G バッジ（画像優先）
+      if(it.badgeR18Src){
+        const bi = ce("img", "badge-img-r18"); bi.src = it.badgeR18Src; li.appendChild(bi);
+      } else if(it.isR18){
+        const b = ce("div", "badge-r18"); b.textContent = "R18"; li.appendChild(b);
+      }
+      if(it.badgeR18GSrc){
+        const bi = ce("img", "badge-img-r18g"); bi.src = it.badgeR18GSrc; li.appendChild(bi);
+      } else if(it.isR18G){
+        const b = ce("div", "badge-r18g"); b.textContent = "R18G"; li.appendChild(b);
       }
 
       const textBox = ce("div");
@@ -230,6 +254,10 @@ function renderSections(){
       const meta = ce("div", "meta");
       if(it.pages){ meta.appendChild(tagEl(`${it.pages}ページ`)); }
       if(it.tracks){ meta.appendChild(tagEl(`${it.tracks}曲`)); }
+      // オリジナルタグ（既刊/旧譜/グッズなど）
+      if(Array.isArray(it.customTags)){
+        it.customTags.filter(Boolean).forEach(t=> meta.appendChild(tagEl(t)));
+      }
 
       if(it.layout === "right"){
         textBox.appendChild(caption);
@@ -373,6 +401,20 @@ on("items-gap","input", e=>{ state.grid.itemsGap = +e.target.value; applyGridVar
 on("card-large-min","input", e=>{ state.grid.largeMin = +e.target.value; applyGridVars(); });
 on("card-small-min","input", e=>{ state.grid.smallMin = +e.target.value; applyGridVars(); });
 
+// 列数と横揃え
+on("cols-large", "input", e=>{
+  state.grid.colsLarge = Math.max(0, parseInt(e.target.value||"0",10));
+  renderSections(); applyGridVars();
+});
+on("cols-small", "input", e=>{
+  state.grid.colsSmall = Math.max(0, parseInt(e.target.value||"0",10));
+  renderSections(); applyGridVars();
+});
+on("grid-align", "change", e=>{
+  state.grid.align = e.target.value; // start | center | end
+  applyGridVars();
+});
+
 // アイテム画像ソースUI
 on("item-image-source","change", e=>{
   const mode = e.target.value;
@@ -396,15 +438,37 @@ on("btn-add-item","click", async ()=>{
     src = url;
   }
 
-  const isNew = g("item-isnew").checked;
-  const badgeFile = g("item-badge-image").files[0];
+  // バッジ
+  const isNew  = g("item-isnew").checked;
+  const isR18  = g("item-isr18").checked;
+  const isR18G = g("item-isr18g").checked;
+
+  const badgeFileNew  = g("item-badge-image").files[0];
+  const badgeFileR18  = g("item-badge-r18-image").files[0];
+  const badgeFileR18G = g("item-badge-r18g-image").files[0];
+
   const desc   = v("item-desc");
   const layout = g("item-layout").value;
   const pages  = +v("item-pages") || 0;
   const tracks = +v("item-tracks") || 0;
-  const badgeSrc = badgeFile ? await fileToDataURL(badgeFile) : "";
 
-  state.sections[sec].items.push({ title, price, src, isNew, badgeSrc, desc, layout, pages, tracks });
+  // オリジナルタグ
+  const customTags = v("item-custom-tags")
+    .split(/[、,]/).map(s=>s.trim()).filter(Boolean);
+
+  const [badgeSrc, badgeR18Src, badgeR18GSrc] = await Promise.all([
+    badgeFileNew  ? fileToDataURL(badgeFileNew)  : Promise.resolve(""),
+    badgeFileR18  ? fileToDataURL(badgeFileR18)  : Promise.resolve(""),
+    badgeFileR18G ? fileToDataURL(badgeFileR18G) : Promise.resolve("")
+  ]);
+
+  state.sections[sec].items.push({
+    title, price, src, isNew, badgeSrc,
+    isR18, badgeR18Src,
+    isR18G, badgeR18GSrc,
+    desc, layout, pages, tracks,
+    customTags
+  });
 
   clearItemForm();
   renderSections();
@@ -416,17 +480,28 @@ function startEditItem(secId, index){
   state.editing = {secId, index};
   el.editIndicator.hidden = false;
   g("sec").value = secId;
+
   g("item-title").value = it.title || "";
   g("item-price").value = it.price || "";
-  g("item-isnew").checked = !!it.isNew;
-  g("item-desc").value = it.desc || "";
+
+  g("item-isnew").checked  = !!it.isNew;
+  g("item-isr18").checked  = !!it.isR18;
+  g("item-isr18g").checked = !!it.isR18G;
+
+  g("item-desc").value   = it.desc || "";
   g("item-layout").value = it.layout || "below";
-  g("item-pages").value = it.pages || "";
+  g("item-pages").value  = it.pages || "";
   g("item-tracks").value = it.tracks || "";
+
+  // オリジナルタグ
+  g("item-custom-tags").value = (it.customTags || []).join(", ");
+
   g("item-image-source").value = it.src && /^https?:/.test(it.src) ? "url" : "file";
   g("item-image-file-wrap").style.display = g("item-image-source").value==="file" ? "" : "none";
   g("item-image-url-wrap").style.display  = g("item-image-source").value==="url"  ? "" : "none";
   g("item-image-url").value = /^https?:/.test(it.src) ? it.src : "";
+
+  // 画像ファイル入力はユーザーのローカル権限的に復元不可のため触らない
 
   el.btnAdd.hidden = true;
   el.btnUpdate.hidden = false;
@@ -440,11 +515,17 @@ function applyEditToItem(){
 
   it.title = v("item-title");
   it.price = v("item-price");
-  it.isNew = g("item-isnew").checked;
-  it.desc  = v("item-desc");
-  it.layout= g("item-layout").value;
-  it.pages = +v("item-pages") || 0;
-  it.tracks= +v("item-tracks") || 0;
+
+  it.isNew  = g("item-isnew").checked;
+  it.isR18  = g("item-isr18").checked;
+  it.isR18G = g("item-isr18g").checked;
+
+  it.desc   = v("item-desc");
+  it.layout = g("item-layout").value;
+  it.pages  = +v("item-pages") || 0;
+  it.tracks = +v("item-tracks") || 0;
+
+  it.customTags = v("item-custom-tags").split(/[、,]/).map(s=>s.trim()).filter(Boolean);
 
   const mode = g("item-image-source").value;
   if(mode==="url"){
@@ -454,8 +535,21 @@ function applyEditToItem(){
     if(file){ fileToDataURL(file).then(data=>{ it.src = data; renderSections(); }); }
   }
 
-  clearItemForm();
-  renderSections();
+  // 任意のバッジ画像の更新
+  const badgeFileNew  = g("item-badge-image").files[0];
+  const badgeFileR18  = g("item-badge-r18-image").files[0];
+  const badgeFileR18G = g("item-badge-r18g-image").files[0];
+  Promise.all([
+    badgeFileNew  ? fileToDataURL(badgeFileNew)  : Promise.resolve(null),
+    badgeFileR18  ? fileToDataURL(badgeFileR18)  : Promise.resolve(null),
+    badgeFileR18G ? fileToDataURL(badgeFileR18G) : Promise.resolve(null),
+  ]).then(([bNew, bR18, bR18G])=>{
+    if(bNew  !== null) it.badgeSrc      = bNew;
+    if(bR18  !== null) it.badgeR18Src   = bR18;
+    if(bR18G !== null) it.badgeR18GSrc  = bR18G;
+    clearItemForm();
+    renderSections();
+  });
 }
 function deleteEditingItem(){
   if(!state.editing) return;
@@ -477,21 +571,27 @@ function clearItemForm(){
   g("item-image-source").value = "file";
   g("item-image-file-wrap").style.display = "";
   g("item-image-url-wrap").style.display = "none";
+
   g("item-isnew").checked = false;
   g("item-badge-image").value = "";
+  g("item-isr18").checked = false;
+  g("item-badge-r18-image").value = "";
+  g("item-isr18g").checked = false;
+  g("item-badge-r18g-image").value = "";
+
   g("item-desc").value = "";
   g("item-layout").value = "below";
   g("item-pages").value = "";
   g("item-tracks").value = "";
+
+  g("item-custom-tags").value = "";
+
   el.btnAdd.hidden = false;
   el.btnUpdate.hidden = true;
   el.btnCancelEdit.hidden = true;
   el.btnDelete.hidden = true;
   state.editing = null;
 }
-el.btnUpdate.addEventListener("click", applyEditToItem);
-el.btnDelete.addEventListener("click", ()=>{ if(confirm("このアイテムを削除しますか？")) deleteEditingItem(); });
-el.btnCancelEdit.addEventListener("click", cancelEdit);
 
 // 枠線/価格/タグ 見た目
 on("item-border-on","change", e=>{
@@ -519,7 +619,12 @@ on("btn-make-qr","click", ()=>{
   state.qrUrl = url;
   const qr = g("qr");
   qr.innerHTML = "";
-  new QRCode(qr, { text: url, width: qr.clientWidth, height: qr.clientHeight, margin: 0 });
+  if (typeof QRCode === "function") {
+    new QRCode(qr, { text: url, width: qr.clientWidth, height: qr.clientHeight, correctLevel: QRCode.CorrectLevel.M });
+  } else {
+    console.warn("QRCode library not found. Skipping QR generation.");
+    qr.textContent = "QR NG";
+  }
 });
 on("note","input", e=>{
   state.note = e.target.value;
@@ -546,12 +651,6 @@ on("btn-export-png","click", async ()=>{
   if(showSafe) node.classList.add("show-safe");
   if(showGrid) node.classList.add("show-grid");
 });
-
-/* ========= ユーティリティ ========= */
-function g(id){ return document.getElementById(id); }
-function qs(sel){ return document.querySelector(sel); }
-function ce(tag, cls){ const n=document.createElement(tag); if(cls) n.className=cls; return n; }
-function v(id){ return g(id).value.trim(); }
 
 /* ========= 初期化 ========= */
 function init() {

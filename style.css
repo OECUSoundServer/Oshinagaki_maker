@@ -19,14 +19,18 @@
   --items-gap: 4mm;
 
   --card-large-min: 70mm;
-  --card-small-min: 42mm;  /* 小は大の最小幅を上限 */
+  --card-small-min: 42mm;
 
   --item-border-width: 0.3mm;
   --item-border-color: #111;
   --item-border-visible: 1;
 
-  --price-style: box;    /* box | pill | none */
+  --price-style: box;    /* box | pill | text | none */
   --tag-style: outline;  /* outline | filled | none */
+
+  --cols-large: 0;       /* 0 = 自動 */
+  --cols-small: 0;       /* 0 = 自動 */
+  --grid-justify: start; /* start | center | end（自動時のみ有効） */
 }
 
 * { box-sizing: border-box; }
@@ -56,7 +60,49 @@ body {
 
 /* サイド/メイン */
 .main { display:grid; grid-template-columns: 380px 1fr; gap: 16px; padding: 16px; }
-.panel { background:#fff; border:1px solid #e5e5ea; border-radius:12px; padding:12px; height: fit-content; position: sticky; top: 64px; }
+/* サイドパネル：中だけ縦スクロール。横は出さない */
+.panel{
+  background:#fff;
+  border:1px solid #e5e5ea;
+  border-radius:12px;
+  padding:12px;
+
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 64px - 16px);
+  overflow-y: auto;   /* ← 縦だけ */
+  overflow-x: hidden; /* ← 横は常に非表示 */
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* 入力UIが横にはみ出さないよう保険 */
+.panel .row-inline{ display:flex; gap:8px; flex-wrap: wrap; }
+.panel .row-inline > *{ min-width: 0; } /* flexアイテムの横はみ出し防止 */
+.panel input[type="text"],
+.panel input[type="number"],
+.panel input[type="url"],
+.panel select,
+.panel textarea{
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding:8px; border:1px solid #ddd; border-radius:8px; font: inherit;
+}
+
+/* （お好みで）スクロールバーの見た目 */
+.panel::-webkit-scrollbar{ width: 10px; }
+.panel::-webkit-scrollbar-track{ background: #f6f6f7; border-radius: 8px; }
+.panel::-webkit-scrollbar-thumb{ background: #cfcfd4; border-radius: 8px; border: 2px solid #f6f6f7; }
+
+/* 幅が狭い時のレイアウト維持（参考） */
+@media (max-width: 1200px){
+  .main{ grid-template-columns: minmax(300px, 36vw) 1fr; }
+}
+@media (max-width: 800px){
+  .main{ grid-template-columns: 1fr; }
+  .panel{ position: static; max-height: none; overflow: visible; }
+}
 .panel h3 { margin: 8px 0; font-size: 14px; opacity: .8; }
 .panel label { display: grid; gap:6px; font-size: 12px; margin: 8px 0; }
 .panel input[type="text"], .panel input[type="number"], .panel input[type="url"], .panel select, .panel textarea{
@@ -111,7 +157,7 @@ body {
 .band { position:absolute; left: var(--band-inset); right: var(--band-inset); height: 100%; background: var(--band); border-radius: 1mm; }
 .band-label {
   position:absolute; top:50%; left:50%; transform: translate(-50%,-50%);
-  font-weight:700; background:#fff; padding: 1mm 2.5mm; border-radius: 1.2mm; border: .3mm solid #1111; white-space: nowrap;
+  font-weight:700; background:#ffffff00; padding: 1mm 2.5mm; border-radius: 1.2mm; border: .3mm solid #1111; white-space: nowrap;
 }
 
 /* セクション */
@@ -119,20 +165,27 @@ body {
 .section:first-of-type{ padding-top: 4mm; }
 .section h2 { font-size: calc(var(--base-pt) * 1.45); margin: 0 0 3mm; border-bottom: .4mm solid #111; display:inline-block; padding-right: 2mm; }
 
-/* ===== アイテム・グリッド ===== */
-
-/* 大カード（新譜/新刊等） */
-.section[data-size="large"] .items{
+/* ===== アイテム・グリッド（列数/寄せ対応） ===== */
+.section .items{
   list-style:none; margin:0; padding:0;
   display:grid; gap: var(--items-gap);
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-large-min), 1fr));
+  justify-content: var(--grid-justify); /* 自動時に効く：start|center|end */
 }
-
-/* 小カード（既刊/グッズ等） — 大より広がらない */
-.section[data-size="small"] .items{
-  list-style:none; margin:0; padding:0;
-  display:grid; gap: var(--items-gap);
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-small-min), var(--card-large-min)));
+/* 自動（data-cols="0"） */
+.section[data-size="large"][data-cols="0"] .items{
+  grid-template-columns: repeat(auto-fit, minmax(var(--card-large-min), var(--card-large-min)));
+}
+.section[data-size="small"][data-cols="0"] .items{
+  grid-template-columns: repeat(auto-fit, minmax(var(--card-small-min), var(--card-small-min)));
+}
+/* 列数固定（>0） */
+.section[data-size="large"]:not([data-cols="0"]) .items{
+  grid-template-columns: repeat(var(--cols-large), minmax(0, 1fr));
+  justify-content: stretch;
+}
+.section[data-size="small"]:not([data-cols="0"]) .items{
+  grid-template-columns: repeat(var(--cols-small), minmax(0, 1fr));
+  justify-content: stretch;
 }
 
 /* カード */
@@ -159,41 +212,55 @@ body {
 .item.layout-right .thumb{ aspect-ratio:1/1; width: 40mm; }
 .item.layout-right .caption{ margin-top: 0; }
 
-/* ★タイトル（キャプション）を説明より大きく */
+/* タイトルは説明より大きく */
 .item .caption { margin-top: 1.5mm; font-weight:800; font-size: calc(var(--base-pt) * 1.25); }
 .item .desc{
   margin-top: 1mm; font-size: calc(var(--base-pt) * .95); line-height: 1.5; color: #333;
 }
 
-/* メタタグ（ページ/曲）— outline/filled/none 切り替え */
+/* メタタグ（ページ/曲＋オリジナルタグ）— outline/filled/none 切替 */
 .item .meta{ margin-top: .6mm; font-size: calc(var(--base-pt) * .88); color: #555; display:flex; gap: 3mm; flex-wrap:wrap; }
 .item .meta .tag{
   border: .25mm solid #bbb; border-radius: .9mm; padding: .4mm 1.4mm; white-space: nowrap; background: transparent;
 }
-/* filled */
-:root[style*="--tag-style: filled"] .item .meta .tag{
-  background: #eee; border-color: #ddd;
-}
-/* none（線なし） */
-:root[style*="--tag-style: none"] .item .meta .tag{
-  border: none; background: transparent; padding: 0; /* テキストのみ */
-}
+:root[style*="--tag-style: filled"] .item .meta .tag{ background: #eee; border-color: #ddd; }
+:root[style*="--tag-style: none"]  .item .meta .tag{ border: none; background: transparent; padding: 0; }
 
-/* 価格ラベル（box/pill/none） */
+/* 価格ラベル（box/pill/text/none） */
 .item .price {
-  position:absolute; right: 1.5mm; bottom: 1.5mm; background:#fff; padding: .8mm 1.4mm;
+  position:absolute; right: 1.5mm; bottom: 1.5mm;
+  background:#fff; padding: .8mm 1.4mm;
   border: .3mm solid #111; border-radius: .8mm; font-weight:900; font-size: calc(var(--base-pt) * 0.95);
 }
 :root[style*="--price-style: pill"] .item .price{ border-radius: 3mm; }
-:root[style*="--price-style: none"] .item .price{ display:none; }
+:root[style*="--price-style: text"] .item .price{ background: transparent; border: none; padding: 0; }
+:root[style*="--price-style: none"] .item .price{ display: none; }
 
-/* NEW バッジ */
+/* NEW バッジ（左上） */
 .item .badge {
   position:absolute; left: -2mm; top: 2mm; background: var(--new); color: #fff;
   padding: .6mm 2mm; font-weight:900; font-size: calc(var(--base-pt) * 0.9);
   border-radius: 1mm; transform: rotate(-6deg); box-shadow: 0 0.6mm 0 rgba(0,0,0,.2); z-index:1;
 }
 .item .badge-img { position:absolute; left: 2mm; top: 2mm; width: 12mm; height: 12mm; object-fit: contain; pointer-events:none; }
+
+/* R18 / R18G バッジ（右上に縦積み） */
+.item .badge-r18{
+  position:absolute; right: 2mm; top: 2mm; background:#c62828; color:#fff;
+  padding:.6mm 2mm; font-weight:900; font-size: calc(var(--base-pt) * .9);
+  border-radius:1mm; z-index:1;
+}
+.item .badge-r18g{
+  position:absolute; right: 2mm; top: 12mm; background:#4a148c; color:#fff;
+  padding:.6mm 2mm; font-weight:900; font-size: calc(var(--base-pt) * .9);
+  border-radius:1mm; z-index:1;
+}
+.item .badge-img-r18{
+  position:absolute; right: 2mm; top: 2mm; width:12mm; height:12mm; object-fit:contain; pointer-events:none; z-index:1;
+}
+.item .badge-img-r18g{
+  position:absolute; right: 2mm; top: 14mm; width:12mm; height:12mm; object-fit:contain; pointer-events:none; z-index:1;
+}
 
 /* フッター */
 .footer { display:flex; justify-content: space-between; align-items:center; gap: 6mm; padding: 2mm var(--pad) 10mm; }
