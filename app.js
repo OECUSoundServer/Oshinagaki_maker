@@ -75,7 +75,10 @@ const gfMap = {
   "Noto Sans JP": "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap",
   "M PLUS 1p": "https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700;900&display=swap",
   "Kosugi Maru": "https://fonts.googleapis.com/css2?family=Kosugi+Maru&display=swap",
-  "Shippori Mincho": "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&display=swap"
+  "Shippori Mincho": "https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;700;800&display=swap",
+  "Mochiy Pop One": "https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&display=swap",
+  "DotGothic16": "https://fonts.googleapis.com/css2?family=DotGothic16&display=swap",
+  "Yomogi": "https://fonts.googleapis.com/css2?family=Yomogi&display=swap"
 };
 const uid = () => Math.random().toString(36).slice(2, 9);
 const cssVar = (k,v,target=document.documentElement)=>target.style.setProperty(k,v);
