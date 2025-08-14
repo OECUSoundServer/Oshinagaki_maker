@@ -322,6 +322,24 @@ body {
 .footer { display:flex; justify-content: space-between; align-items:center; gap: 6mm; padding: 2mm var(--pad) 10mm; }
 .footer .note  { font-weight:700; font-size: calc(var(--base-pt) * 1.0); }
 .qr { width: 22mm; height: 22mm; border: .3mm solid #111; border-radius: 1mm; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.paper .footer .qr{
+  width: var(--qr-size, 32mm);
+  height: var(--qr-size, 32mm);
+  padding: var(--qr-pad, 2mm);
+  box-sizing: border-box;
+  background: #fff; /* 余白は白で出力（PNG/印刷OK） */
+  border: var(--qr-border-w, 0mm) solid var(--qr-border-color, transparent);
+  border-radius: var(--qr-radius, 0mm);
+  display: grid;
+  place-items: center;
+  overflow: hidden; /* 角丸に追従 */
+}
+.paper .footer .qr canvas,
+.paper .footer .qr img{
+  width: 100% !important;  /* 内側いっぱいにフィット */
+  height: 100% !important;
+  display: block;
+}
 
 /* 印刷 */
 @media print {

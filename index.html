@@ -289,7 +289,30 @@
       <section>
         <h3>QR / 注記</h3>
         <label>QRリンクURL<input id="qr-url" type="url" placeholder="https://example.com" /></label>
+        <div class="row-inline">
+          <label style="flex:1">サイズ(mm)
+            <input id="qr-size" type="number" min="10" step="1" value="32" />
+          </label>
+          <label style="flex:1">余白(mm)
+            <input id="qr-padding" type="number" min="0" step="0.5" value="2" />
+          </label>
+        </div>
+        <div class="row-inline">
+          <label class="chk" style="flex:1"><input id="qr-border-on" type="checkbox" /> 枠線を表示</label>
+          <label style="flex:1">枠の太さ(mm)
+            <input id="qr-border-width" type="number" min="0" step="0.1" value="0.4" />
+          </label>
+        </div>
+        <div class="row-inline">
+          <label style="flex:1">枠の色
+            <input id="qr-border-color" type="color" value="#222222" />
+          </label>
+          <label style="flex:1">角丸(mm)
+            <input id="qr-border-radius" type="number" min="0" step="0.5" value="1.5" />
+          </label>
+        </div>
         <button id="btn-make-qr">QR生成</button>
+
         <label>注記テキスト<textarea id="note" rows="3" placeholder="その他詳細はWebへ など"></textarea></label>
       </section>
     </aside>

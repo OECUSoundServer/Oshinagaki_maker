@@ -20,6 +20,16 @@ const state = {
   note: "その他頒布物の詳細はコチラ→",
   qrUrl: "",
 
+  // ★ 追加: QR 見た目設定
+  qrStyle: {
+    sizeMm: 32,
+    padMm: 2,
+    borderOn: false,
+    borderWidthMm: 0.4,
+    borderColor: "#222222",
+    radiusMm: 1.5
+  },
+
   typography: { family: "Noto Sans JP", basePt: 11 },
 
   layout: { userScale: 100, autoScale: 100 },   // %（総合 = auto × user）
@@ -182,6 +192,62 @@ function applyBackground(){
       cssVar("--paper-bg-size", fit === "contain" ? "contain" : "cover", p);
       cssVar("--paper-bg-repeat", "no-repeat", p);
     }
+  }
+}
+
+/* ========= QR スタイル適用 & 生成 ========= */
+// キャンバス側(#paper 内の #qr)に見た目を反映（CSS未改修でも動くよう inline でも設定）
+function applyQrStyle(){
+  const t = el.paper;
+  const q = state.qrStyle;
+  // CSSカスタムプロパティ（CSSで参照する場合）
+  cssVar("--qr-size",   `${Math.max(10, q.sizeMm)}mm`, t);
+  cssVar("--qr-pad",    `${Math.max(0, q.padMm)}mm`, t);
+  cssVar("--qr-border-w", `${(q.borderOn ? Math.max(0, q.borderWidthMm) : 0)}mm`, t);
+  cssVar("--qr-border-color", q.borderColor || "#000000", t);
+  cssVar("--qr-radius", `${Math.max(0, q.radiusMm)}mm`, t);
+
+  // inline style（CSS未導入でも効く）
+  const qr = g("qr");
+  if(qr){
+    qr.style.width = `${Math.max(10, q.sizeMm)}mm`;
+    qr.style.height = `${Math.max(10, q.sizeMm)}mm`;
+    qr.style.padding = `${Math.max(0, q.padMm)}mm`;
+    qr.style.boxSizing = "border-box";
+    qr.style.background = "#ffffff";
+    qr.style.border = q.borderOn ? `${Math.max(0, q.borderWidthMm)}mm solid ${q.borderColor || "#000"}` : "none";
+    qr.style.borderRadius = `${Math.max(0, q.radiusMm)}mm`;
+    qr.style.display = "grid";
+    qr.style.placeItems = "center";
+    qr.style.overflow = "hidden";
+  }
+}
+// パディングを除いた内側の正味サイズ(px)を算出
+function qrInnerPx(){
+  const qr = g("qr"); if(!qr) return 64;
+  const cs = getComputedStyle(qr);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop)  + parseFloat(cs.paddingBottom);
+  const w = Math.max(40, Math.floor(qr.clientWidth  - padX));
+  const h = Math.max(40, Math.floor(qr.clientHeight - padY));
+  return Math.floor(Math.min(w, h));
+}
+// URLが設定されていれば現在のスタイルで再生成
+function remakeQRIfNeeded(){
+  if(!state.qrUrl) return;
+  const qr = g("qr"); if(!qr) return;
+  qr.innerHTML = "";
+  if (typeof QRCode === "function") {
+    const sz = qrInnerPx();
+    new QRCode(qr, {
+      text: state.qrUrl,
+      width: sz,
+      height: sz,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else {
+    console.warn("QRCode library not found.");
+    qr.textContent = "QR NG";
   }
 }
 
@@ -776,17 +842,12 @@ on("tag-style","change", e=>{
 });
 
 /* ========= QR / 注記 ========= */
+// 生成ボタン：URLを反映し、現在の見た目で生成
 on("btn-make-qr","click", ()=>{
   const url = v("qr-url"); if(!url){ alert("URLを入力してください"); return; }
   state.qrUrl = url;
-  const qr = g("qr");
-  qr.innerHTML = "";
-  if (typeof QRCode === "function") {
-    new QRCode(qr, { text: url, width: qr.clientWidth, height: qr.clientHeight, correctLevel: QRCode.CorrectLevel.M });
-  } else {
-    console.warn("QRCode library not found. Skipping QR generation.");
-    qr.textContent = "QR NG";
-  }
+  applyQrStyle();
+  remakeQRIfNeeded();
 });
 on("note","input", e=>{
   state.note = e.target.value;
@@ -825,6 +886,7 @@ on("btn-export-png","click", async ()=>{
 /* ========= 初期化 ========= */
 function init() {
   applyGridVars(); applyItemBorder(); applyAppearance(); applyBandTune(); applyBackground();
+  applyQrStyle(); // ★ 追加: 初期反映
   rerenderAll();
 
   const ro = new ResizeObserver(()=> { recomputeAutoScale(); applyAutoColWidth(); });
@@ -835,6 +897,26 @@ function init() {
   on("btn-cancel-edit", "click", cancelEdit);
   on("btn-delete-item", "click", ()=>{
     if(state.editing && confirm("このアイテムを削除しますか？")) deleteEditingItem();
+  });
+
+  // ★ 追加: QR 関連のUIイベント（存在する場合のみ登録）
+  const qs = g("qr-size"); if(qs) qs.addEventListener("input", e=>{
+    state.qrStyle.sizeMm = +e.target.value || 32; applyQrStyle(); remakeQRIfNeeded(); recomputeAutoScale();
+  });
+  const qp = g("qr-padding"); if(qp) qp.addEventListener("input", e=>{
+    state.qrStyle.padMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded(); recomputeAutoScale();
+  });
+  const qbo = g("qr-border-on"); if(qbo) qbo.addEventListener("change", e=>{
+    state.qrStyle.borderOn = e.target.checked; applyQrStyle(); remakeQRIfNeeded();
+  });
+  const qbw = g("qr-border-width"); if(qbw) qbw.addEventListener("input", e=>{
+    state.qrStyle.borderWidthMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded();
+  });
+  const qbc = g("qr-border-color"); if(qbc) qbc.addEventListener("input", e=>{
+    state.qrStyle.borderColor = e.target.value || "#000000"; applyQrStyle(); remakeQRIfNeeded();
+  });
+  const qbr = g("qr-border-radius"); if(qbr) qbr.addEventListener("input", e=>{
+    state.qrStyle.radiusMm = +e.target.value || 0; applyQrStyle(); remakeQRIfNeeded();
   });
 
   el.paper.classList.add("show-safe");
