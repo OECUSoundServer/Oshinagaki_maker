@@ -342,11 +342,41 @@ body {
 }
 
 /* 印刷 */
-@media print {
+/* @media print {
   @page { size: A4 portrait; margin: 0; }
   body { background: #fff; }
   .appbar, .panel, .tips { display:none !important; }
   .paper { box-shadow:none; margin:0; }
+} */
+
+@media print {
+  /* ブラウザ余白でズレないように */
+  html, body { margin: 0; padding: 0; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* いったん全て非表示（レイアウト計算に混ざらないように） */
+  body * { visibility: hidden !important; }
+
+  /* #paper だけ表示 */
+  #paper, #paper * { visibility: visible !important; }
+
+  /* #paper を印刷ページ左上に固定 */
+  #paper {
+    position: fixed;
+    left: 0;
+    top: 0;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* 画面用の案内は消える（visibilityで消えるが念のため） */
+  .appbar, .panel, .tips { display: none !important; }
+}
+
+/* 印刷ページサイズ（まずはA4固定でOK） */
+@page {
+  size: A4 portrait;
+  margin: 0;
 }
 
 /* 2カラムのラッパ（JSでも設定しますが保険として） */
@@ -368,3 +398,4 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(var(--colw, 80px), var(--colw, 80px)));
   justify-content: var(--grid-justify, start);
 }
+
